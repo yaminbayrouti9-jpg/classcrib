@@ -29,6 +29,7 @@ import {
   Globe,
   MessageSquare,
   X,
+  Check,
   Send,
   Sparkles,
   HelpCircle,
@@ -313,7 +314,7 @@ export default function MarketplacePage() {
               onClick={handleExplainMe}
               className="flex items-center gap-2 px-6 py-4 bg-primary/10 text-primary rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-primary hover:text-white transition-all border border-primary/20"
             >
-              <Sparkles className="w-4 h-4" /> Explain Me
+              <Sparkles className="w-4 h-4" /> Explain Platform
             </button>
           </div>
         </div>
@@ -560,6 +561,8 @@ export default function MarketplacePage() {
                   loading={loading === 'solar_panels'}
                   isOwned={userStats.purchasedItems?.includes('solar_panels')}
                   isNeed
+                  pros={["30% Electricity Bill reduction", "Sustainable energy source"]}
+                  cons={["High initial investment"]}
                 />
                 <ShopCard 
                   title="Wind Turbine" 
@@ -571,6 +574,8 @@ export default function MarketplacePage() {
                   loading={loading === 'wind_turbine'}
                   isOwned={userStats.purchasedItems?.includes('wind_turbine')}
                   isNeed
+                  pros={["40% Electricity Bill reduction", "Constant power generation"]}
+                  cons={["Premium pricing", "Space intensive"]}
                 />
                 <ShopCard 
                   title="Smart Metering" 
@@ -582,6 +587,8 @@ export default function MarketplacePage() {
                   loading={loading === 'smart_meter'}
                   isOwned={userStats.purchasedItems?.includes('smart_meter')}
                   isNeed
+                  pros={["Real-time statistics", "Eliminates energy waste"]}
+                  cons={["Initial configuration required"]}
                 />
               </div>
             </section>
@@ -597,17 +604,17 @@ export default function MarketplacePage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {isJunior ? (
                   <>
-                    <ShopCard title="Epic Sticker Pack" desc="Show off on your profile with cool stickers" price={300} icon={Sparkles} category="Collection" onClick={() => handlePurchase('stickers_1', 300)} isOwned={userStats.purchasedItems?.includes('stickers_1')} />
-                    <ShopCard title="Rainbow Trail" icon={TrendingUp} desc="Leaves a rainbow trail when you move in 3D" price={800} category="VFX" onClick={() => handlePurchase('trail_rainbow', 800)} isOwned={userStats.purchasedItems?.includes('trail_rainbow')} />
-                    <ShopCard title="Pet Dragon Egg" icon={Activity} desc="A legendary companion for your home" price={5000} category="Pets" onClick={() => handlePurchase('dragon_egg', 5000)} isOwned={userStats.purchasedItems?.includes('dragon_egg')} />
-                    <ShopCard title="Golden Nameplate" icon={Trophy} desc="Stand out in the global rankings" price={1200} category="Social" onClick={() => handlePurchase('gold_name', 1200)} isOwned={userStats.purchasedItems?.includes('gold_name')} />
+                    <ShopCard title="Epic Sticker Pack" desc="Show off on your profile with cool stickers" price={300} icon={Sparkles} category="Collection" onClick={() => handlePurchase('stickers_1', 300)} isOwned={userStats.purchasedItems?.includes('stickers_1')} pros={["Unique social flair", "Tradeable assets"]} cons={["Purely cosmetic"]} />
+                    <ShopCard title="Rainbow Trail" icon={TrendingUp} desc="Leaves a rainbow trail when you move in 3D" price={800} category="VFX" onClick={() => handlePurchase('trail_rainbow', 800)} isOwned={userStats.purchasedItems?.includes('trail_rainbow')} pros={["Premium visual effect", "Dynamic movement"]} cons={["Can be distracting"]} />
+                    <ShopCard title="Pet Dragon Egg" icon={Activity} desc="A legendary companion for your home" price={5000} category="Pets" onClick={() => handlePurchase('dragon_egg', 5000)} isOwned={userStats.purchasedItems?.includes('dragon_egg')} pros={["Ultra-rare companion", "Maximum status"]} cons={["Long hatching period"]} />
+                    <ShopCard title="Golden Nameplate" icon={Trophy} desc="Stand out in the global rankings" price={1200} category="Social" onClick={() => handlePurchase('gold_name', 1200)} isOwned={userStats.purchasedItems?.includes('gold_name')} pros={["Leaderboard prestige", "Permanent unlock"]} cons={["No functional boost"]} />
                   </>
                 ) : (
                   <>
-                    <ShopCard title="AI Turbo Boost" desc="Unlock high-priority AI processing for 24h" price={500} icon={Zap} category="Productivity" onClick={() => handlePurchase('ai_turbo', 500)} isOwned={userStats.purchasedItems?.includes('ai_turbo')} />
-                    <ShopCard title="Zen Focus Ambiance" desc="Unlock premium focus soundscapes" price={450} icon={Activity} category="Focus" onClick={() => handlePurchase('zen_ambiance', 450)} isOwned={userStats.purchasedItems?.includes('zen_ambiance')} />
-                    <ShopCard title="Deep Work Timer" desc="Custom pomodoro widget" price={800} icon={Activity} category="Focus" onClick={() => handlePurchase('focus_timer', 800)} isOwned={userStats.purchasedItems?.includes('focus_timer')} />
-                    <ShopCard title="Export License" desc="Export crib as high-res PDF" price={1200} icon={ArrowUpRight} category="Creator" onClick={() => handlePurchase('pdf_export', 1200)} isOwned={userStats.purchasedItems?.includes('pdf_export')} />
+                    <ShopCard title="AI Turbo Boost" desc="Unlock high-priority AI processing for 24h" price={500} icon={Zap} category="Productivity" onClick={() => handlePurchase('ai_turbo', 500)} isOwned={userStats.purchasedItems?.includes('ai_turbo')} pros={["Faster response times", "Priority AI features"]} cons={["Temporary (24h)"]} />
+                    <ShopCard title="Zen Focus Ambiance" desc="Unlock premium focus soundscapes" price={450} icon={Activity} category="Focus" onClick={() => handlePurchase('zen_ambiance', 450)} isOwned={userStats.purchasedItems?.includes('zen_ambiance')} pros={["Immersive focus", "Variety of themes"]} cons={["Requires headphones for best experience"]} />
+                    <ShopCard title="Deep Work Timer" desc="Custom pomodoro widget" price={800} icon={Activity} category="Focus" onClick={() => handlePurchase('focus_timer', 800)} isOwned={userStats.purchasedItems?.includes('focus_timer')} pros={["Science-backed focus", "Custom intervals"]} cons={["Requires manual start"]} />
+                    <ShopCard title="Export License" desc="Export crib as high-res PDF" price={1200} icon={ArrowUpRight} category="Creator" onClick={() => handlePurchase('pdf_export', 1200)} isOwned={userStats.purchasedItems?.includes('pdf_export')} pros={["Shareable portfolio", "High resolution"]} cons={["Single-format export"]} />
                   </>
                 )}
               </div>
@@ -872,7 +879,7 @@ function AssetCard({ title, value, unit, price, icon: Icon, color }: any) {
   );
 }
 
-function ShopCard({ title, desc, price, icon: Icon, category, onClick, loading, isOwned, isNeed }: any) {
+function ShopCard({ title, desc, price, icon: Icon, category, onClick, loading, isOwned, isNeed, pros = [], cons = [] }: any) {
   return (
     <div className={clsx(
       "bento-card p-8 flex flex-col justify-between hover:border-primary transition-all group relative overflow-hidden",
@@ -896,6 +903,22 @@ function ShopCard({ title, desc, price, icon: Icon, category, onClick, loading, 
            <h4 className="text-xl font-black text-text-primary leading-tight">{title}</h4>
            <p className="text-sm font-bold text-text-secondary mt-1">{desc}</p>
         </div>
+
+        {/* Pros & Cons */}
+        {(pros.length > 0 || cons.length > 0) && (
+          <div className="pt-4 space-y-2 border-t border-card-border mt-4">
+            {pros.map((p: string, i: number) => (
+              <div key={i} className="flex items-center gap-2 text-[10px] font-bold text-emerald-500">
+                <Check className="w-3 h-3" /> {p}
+              </div>
+            ))}
+            {cons.map((c: string, i: number) => (
+              <div key={i} className="flex items-center gap-2 text-[10px] font-bold text-rose-500">
+                <X className="w-3 h-3" /> {c}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mt-10 flex items-center justify-between relative z-10">

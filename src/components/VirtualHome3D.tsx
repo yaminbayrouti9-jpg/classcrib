@@ -414,7 +414,7 @@ export default function VirtualHome3D({ homeLevel, purchasedItems, electricitySt
           <Suspense fallback={null}>
             <group position={[0, -1.5, 0]}>
               {HouseModel}
-              {purchasedItems.includes("Solar Array") && <SolarArray />}
+              {(purchasedItems.includes("solar_panels") || purchasedItems.includes("Solar Array")) && <SolarArray />}
               {purchasedItems.includes("Backyard Garden") && <BackyardGarden />}
               {purchasedItems.includes("Sports Zone") && <SportsZone />}
               {purchasedItems.includes("Solar Battery") && <SolarBattery />}

@@ -26,13 +26,185 @@ import clsx from "clsx";
 import VirtualHome3D from "@/components/VirtualHome3D";
 import CribbyTip from "@/components/ai/CribbyTip";
 import HomeUpgradePopover from "@/components/HomeUpgradePopover";
+import ProductOverlay from "@/components/ProductOverlay";
 
+const VIRTUAL_HOME_PRODUCTS: Record<string, {
+  description: string;
+  advantages: string[];
+  disadvantages: string[];
+  inPlatformBenefits: string[];
+}> = {
+  "Backyard Garden": {
+    description: "Transform your outdoor space with a lush backyard garden full of plants and trees.",
+    advantages: [
+      "Adds vibrant greenery to your virtual home yard",
+      "Boosts your home's aesthetic appeal in the 3D view",
+      "Fosters a peaceful, nature-friendly environment"
+    ],
+    disadvantages: [
+      "Requires upfront investment of 500 coins",
+      "No direct financial rebate or utility discount"
+    ],
+    inPlatformBenefits: [
+      "Fully visual 3D asset addition in your Virtual Home view"
+    ]
+  },
+  "Solar Array": {
+    description: "Harness clean solar energy by placing a solar panel array on your house's roof.",
+    advantages: [
+      "Generates clean, free electricity from daylight",
+      "Reduces dependence on the municipal power grid",
+      "Promotes renewable energy use"
+    ],
+    disadvantages: [
+      "Initial cost of 1200 coins",
+      "Weather-dependent (peak efficiency during daylight)"
+    ],
+    inPlatformBenefits: [
+      "Reduces your Electricity Bill by 30% permanently!",
+      "Displays a sleek 3D Solar Array on your roof"
+    ]
+  },
+  "Solar Battery": {
+    description: "A storage unit to capture and store excess energy produced by your solar panels.",
+    advantages: [
+      "Provides emergency energy reserve",
+      "Increases energy autonomy during grid outages",
+      "Improves overall energy management"
+    ],
+    disadvantages: [
+      "Costs 2000 coins",
+      "Requires Level 5 to unlock"
+    ],
+    inPlatformBenefits: [
+      "Reduces your Electricity Bill by 50% permanently (overrides Solar Array's discount)!",
+      "Unlocks the 3D Solar Battery storage unit in your yard"
+    ]
+  },
+  "Water Reservoir": {
+    description: "A high-capacity water collection tank to store rain and tap water.",
+    advantages: [
+      "Collects clean rainwater, decreasing reliance on mains water",
+      "Ensures water security during utility maintenance"
+    ],
+    disadvantages: [
+      "Costs 1800 coins",
+      "Requires Level 8 to unlock"
+    ],
+    inPlatformBenefits: [
+      "Reduces your Water Bill by 50% permanently!",
+      "Displays a large 3D Water Reservoir tank in your yard"
+    ]
+  },
+  "Tax Consultant": {
+    description: "Hire a professional virtual tax advisor to optimize your property tax reports.",
+    advantages: [
+      "Leverages tax exemptions and property benefits",
+      "Saves hours of financial planning"
+    ],
+    disadvantages: [
+      "High upfront fee of 3500 coins",
+      "Requires Level 12 to unlock"
+    ],
+    inPlatformBenefits: [
+      "Reduces your Property Tax by 20% permanently (pays only 80% of tax bills)!",
+      "Displays a 3D Tax Consultant office next to your property"
+    ]
+  },
+  "Sports Zone": {
+    description: "Build a premium backyard sports court featuring a basketball hoop.",
+    advantages: [
+      "Adds recreational activities to your virtual property",
+      "Greatly improves physical health representation"
+    ],
+    disadvantages: [
+      "Costs 2500 coins",
+      "Requires Level 15 to unlock"
+    ],
+    inPlatformBenefits: [
+      "Displays a beautiful red basketball court and hoop in your yard"
+    ]
+  },
+  "Gaming Setup": {
+    description: "Upgrade your room with ambient LED lighting, ergonomic desk, and double screen gaming rig.",
+    advantages: [
+      "High performance workstation for studying and gaming",
+      "Stunning neon ambient aesthetic"
+    ],
+    disadvantages: [
+      "Consumes high standby power",
+      "Requires Level 20 to unlock"
+    ],
+    inPlatformBenefits: [
+      "Unlocks purple ambient neon point lighting inside the 3D home scene"
+    ]
+  },
+  "Art Studio": {
+    description: "Set up a creative arts corner with a professional easel and paint supplies.",
+    advantages: [
+      "Fosters artistic expression and creative design",
+      "Adds class and culture to your home interior"
+    ],
+    disadvantages: [
+      "Costs 1800 coins",
+      "Requires Level 25 to unlock"
+    ],
+    inPlatformBenefits: [
+      "Displays a custom 3D Easel and Canvas on your upper balcony"
+    ]
+  },
+  "Tesla Powerwall": {
+    description: "Install the ultimate smart home lithium-ion battery storage system.",
+    advantages: [
+      "Unmatched energy independence",
+      "Automatically charges and manages electricity profiles"
+    ],
+    disadvantages: [
+      "Very expensive upgrade (5000 coins)",
+      "Requires Level 35 to unlock"
+    ],
+    inPlatformBenefits: [
+      "Reduces your Electricity Bill by 80% permanently!",
+      "Renders a sleek, branded 3D Tesla Powerwall unit outside your home"
+    ]
+  },
+  "Off-Grid Purifier": {
+    description: "Equip your home with an advanced molecular filtration system for infinite clean water.",
+    advantages: [
+      "Full water filtration from any source",
+      "Eliminates municipal water dependencies"
+    ],
+    disadvantages: [
+      "High cost of 4500 coins",
+      "Requires Level 45 to unlock"
+    ],
+    inPlatformBenefits: [
+      "Reduces your Water Bill by 80% permanently!",
+      "Unlocks the 3D Smart Filter tank model in your yard"
+    ]
+  },
+  "Golden Statue": {
+    description: "A legendary solid-gold monument to commemorate your ultimate academic status.",
+    advantages: [
+      "The ultimate sign of wealth and prestige",
+      "Glows with a premium metallic finish"
+    ],
+    disadvantages: [
+      "Exorbitant cost of 10000 coins",
+      "Requires Level 50 to unlock"
+    ],
+    inPlatformBenefits: [
+      "Displays a floating, rotating golden torus knot statue in your front yard"
+    ]
+  }
+};
 
 export default function VirtualHomePage() {
   const { data: session } = useSession();
   const [userStats, setUserStats] = useState<any>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [showUpgradePopover, setShowUpgradePopover] = useState<{ level: number } | null>(null);
+  const [pendingPurchaseProduct, setPendingPurchaseProduct] = useState<any | null>(null);
 
   const fetchStats = async () => {
     const res = await fetch("/api/user/stats");
@@ -79,6 +251,7 @@ export default function VirtualHomePage() {
       const data = await res.json();
       if (data.success) {
         fetchStats();
+        setPendingPurchaseProduct(null);
       } else if (data.error) {
         alert(data.error);
       }
@@ -86,6 +259,22 @@ export default function VirtualHomePage() {
       console.error("Purchase failed:", err);
     } finally {
       setLoading(null);
+    }
+  };
+
+  const initiatePurchase = (title: string, cost: number, icon: any, color: string, levelReq?: number) => {
+    const details = VIRTUAL_HOME_PRODUCTS[title];
+    if (details) {
+      setPendingPurchaseProduct({
+        title,
+        cost,
+        icon,
+        color,
+        levelReq,
+        ...details
+      });
+    } else {
+      handlePurchase(title, cost);
     }
   };
 
@@ -182,7 +371,17 @@ export default function VirtualHomePage() {
                title="Electricity" 
                status={electricityStatus} 
                cost={200} 
-               discount={ownedAssets.includes('Tesla Powerwall') ? 0.2 : (ownedAssets.includes('Solar Battery') ? 0.5 : 1)}
+               discount={
+                 ownedAssets.includes('Tesla Powerwall') 
+                   ? 0.2 
+                   : (ownedAssets.includes('Solar Battery') 
+                     ? 0.5 
+                     : (ownedAssets.includes('wind_turbine') 
+                       ? 0.6 
+                       : ((ownedAssets.includes('Solar Array') || ownedAssets.includes('solar_panels')) 
+                         ? 0.7 
+                         : 1)))
+               }
                icon={Zap} 
                onPay={() => payBill('electricity')}
                loading={loading === 'electricity'}
@@ -215,26 +414,26 @@ export default function VirtualHomePage() {
           <div className="bento-card student-accent">
             <h4 className="text-xl font-black text-text-primary mb-6 tracking-tight">Crib Shop</h4>
             <div className="space-y-6">
-              <ShopBentoItem title="Backyard Garden" cost={500} icon={Trees} color="text-green-500" owned={ownedAssets.includes('Backyard Garden')} onPurchase={() => handlePurchase('Backyard Garden', 500)} loading={loading === 'Backyard Garden'} />
-              <ShopBentoItem title="Solar Array" cost={1200} icon={Sun} color="text-orange-400" owned={ownedAssets.includes('Solar Array')} onPurchase={() => handlePurchase('Solar Array', 1200)} loading={loading === 'Solar Array'} />
+              <ShopBentoItem title="Backyard Garden" cost={500} icon={Trees} color="text-green-500" owned={ownedAssets.includes('Backyard Garden')} onPurchase={() => initiatePurchase('Backyard Garden', 500, Trees, 'text-green-500')} loading={loading === 'Backyard Garden'} />
+              <ShopBentoItem title="Solar Array" cost={1200} icon={Sun} color="text-orange-400" owned={ownedAssets.includes('Solar Array')} onPurchase={() => initiatePurchase('Solar Array', 1200, Sun, 'text-orange-400')} loading={loading === 'Solar Array'} />
 
               <div className="h-px bg-card-border my-4" />
               <p className="text-[10px] font-black text-text-tertiary uppercase tracking-widest mb-4">Level Upgrades</p>
 
-              <ShopBentoItem title="Solar Battery" cost={2000} icon={Zap} color="text-amber-500" owned={ownedAssets.includes('Solar Battery')} onPurchase={() => handlePurchase('Solar Battery', 2000)} loading={loading === 'Solar Battery'} levelReq={5} currentLevel={userStats?.level} />
-              <ShopBentoItem title="Water Reservoir" cost={1800} icon={Droplets} color="text-blue-500" owned={ownedAssets.includes('Water Reservoir')} onPurchase={() => handlePurchase('Water Reservoir', 1800)} loading={loading === 'Water Reservoir'} levelReq={8} currentLevel={userStats?.level} />
-              <ShopBentoItem title="Tax Consultant" cost={3500} icon={ShieldCheck} color="text-indigo-500" owned={ownedAssets.includes('Tax Consultant')} onPurchase={() => handlePurchase('Tax Consultant', 3500)} loading={loading === 'Tax Consultant'} levelReq={12} currentLevel={userStats?.level} />
+              <ShopBentoItem title="Solar Battery" cost={2000} icon={Zap} color="text-amber-500" owned={ownedAssets.includes('Solar Battery')} onPurchase={() => initiatePurchase('Solar Battery', 2000, Zap, 'text-amber-500', 5)} loading={loading === 'Solar Battery'} levelReq={5} currentLevel={userStats?.level} />
+              <ShopBentoItem title="Water Reservoir" cost={1800} icon={Droplets} color="text-blue-500" owned={ownedAssets.includes('Water Reservoir')} onPurchase={() => initiatePurchase('Water Reservoir', 1800, Droplets, 'text-blue-500', 8)} loading={loading === 'Water Reservoir'} levelReq={8} currentLevel={userStats?.level} />
+              <ShopBentoItem title="Tax Consultant" cost={3500} icon={ShieldCheck} color="text-indigo-500" owned={ownedAssets.includes('Tax Consultant')} onPurchase={() => initiatePurchase('Tax Consultant', 3500, ShieldCheck, 'text-indigo-500', 12)} loading={loading === 'Tax Consultant'} levelReq={12} currentLevel={userStats?.level} />
 
-              <ShopBentoItem title="Sports Zone" cost={2500} icon={Flag} color="text-red-400" owned={ownedAssets.includes('Sports Zone')} onPurchase={() => handlePurchase('Sports Zone', 2500)} loading={loading === 'Sports Zone'} levelReq={15} currentLevel={userStats?.level} />
-              <ShopBentoItem title="Gaming Setup" cost={1500} icon={Zap} color="text-purple-400" owned={ownedAssets.includes('Gaming Setup')} onPurchase={() => handlePurchase('Gaming Setup', 1500)} loading={loading === 'Gaming Setup'} levelReq={20} currentLevel={userStats?.level} />
-              <ShopBentoItem title="Art Studio" cost={1800} icon={Sparkles} color="text-pink-400" owned={ownedAssets.includes('Art Studio')} onPurchase={() => handlePurchase('Art Studio', 1800)} loading={loading === 'Art Studio'} levelReq={25} currentLevel={userStats?.level} />
+              <ShopBentoItem title="Sports Zone" cost={2500} icon={Flag} color="text-red-400" owned={ownedAssets.includes('Sports Zone')} onPurchase={() => initiatePurchase('Sports Zone', 2500, Flag, 'text-red-400', 15)} loading={loading === 'Sports Zone'} levelReq={15} currentLevel={userStats?.level} />
+              <ShopBentoItem title="Gaming Setup" cost={1500} icon={Zap} color="text-purple-400" owned={ownedAssets.includes('Gaming Setup')} onPurchase={() => initiatePurchase('Gaming Setup', 1500, Zap, 'text-purple-400', 20)} loading={loading === 'Gaming Setup'} levelReq={20} currentLevel={userStats?.level} />
+              <ShopBentoItem title="Art Studio" cost={1800} icon={Sparkles} color="text-pink-400" owned={ownedAssets.includes('Art Studio')} onPurchase={() => initiatePurchase('Art Studio', 1800, Sparkles, 'text-pink-400', 25)} loading={loading === 'Art Studio'} levelReq={25} currentLevel={userStats?.level} />
 
               <div className="h-px bg-card-border my-4" />
               <p className="text-[10px] font-black text-text-tertiary uppercase tracking-widest mb-4">Master Level Items</p>
 
-              <ShopBentoItem title="Tesla Powerwall" cost={5000} icon={Zap} color="text-rose-600" owned={ownedAssets.includes('Tesla Powerwall')} onPurchase={() => handlePurchase('Tesla Powerwall', 5000)} loading={loading === 'Tesla Powerwall'} levelReq={35} currentLevel={userStats?.level} />
-              <ShopBentoItem title="Off-Grid Purifier" cost={4500} icon={Droplets} color="text-cyan-500" owned={ownedAssets.includes('Off-Grid Purifier')} onPurchase={() => handlePurchase('Off-Grid Purifier', 4500)} loading={loading === 'Off-Grid Purifier'} levelReq={45} currentLevel={userStats?.level} />
-              <ShopBentoItem title="Golden Statue" cost={10000} icon={Trophy} color="text-amber-500" owned={ownedAssets.includes('Golden Statue')} onPurchase={() => handlePurchase('Golden Statue', 10000)} loading={loading === 'Golden Statue'} levelReq={50} currentLevel={userStats?.level} />
+              <ShopBentoItem title="Tesla Powerwall" cost={5000} icon={Zap} color="text-rose-600" owned={ownedAssets.includes('Tesla Powerwall')} onPurchase={() => initiatePurchase('Tesla Powerwall', 5000, Zap, 'text-rose-600', 35)} loading={loading === 'Tesla Powerwall'} levelReq={35} currentLevel={userStats?.level} />
+              <ShopBentoItem title="Off-Grid Purifier" cost={4500} icon={Droplets} color="text-cyan-500" owned={ownedAssets.includes('Off-Grid Purifier')} onPurchase={() => initiatePurchase('Off-Grid Purifier', 4500, Droplets, 'text-cyan-500', 45)} loading={loading === 'Off-Grid Purifier'} levelReq={45} currentLevel={userStats?.level} />
+              <ShopBentoItem title="Golden Statue" cost={10000} icon={Trophy} color="text-amber-500" owned={ownedAssets.includes('Golden Statue')} onPurchase={() => initiatePurchase('Golden Statue', 10000, Trophy, 'text-amber-500', 50)} loading={loading === 'Golden Statue'} levelReq={50} currentLevel={userStats?.level} />
             </div>
           </div>
         </div>
@@ -243,6 +442,16 @@ export default function VirtualHomePage() {
         <HomeUpgradePopover 
           level={showUpgradePopover.level} 
           onClose={() => setShowUpgradePopover(null)} 
+        />
+      )}
+      {pendingPurchaseProduct && (
+        <ProductOverlay
+          product={pendingPurchaseProduct}
+          userCoins={userStats?.coins || 0}
+          userLevel={userStats?.level || 1}
+          loading={loading === pendingPurchaseProduct.title}
+          onConfirm={() => handlePurchase(pendingPurchaseProduct.title, pendingPurchaseProduct.cost)}
+          onCancel={() => setPendingPurchaseProduct(null)}
         />
       )}
     </div>

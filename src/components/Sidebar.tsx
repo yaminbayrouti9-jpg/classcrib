@@ -81,7 +81,7 @@ export default function Sidebar() {
     { icon: ClipboardCheck, label: "Verifications", href: "/verify", badge: pendingCount },
     { icon: Trophy, label: "Leaderboards", href: "/rankings" },
     { icon: Sparkles, label: "Reward Students", href: "/rewards" },
-    { icon: "/cribby-idea.png", label: "IA Assistant", href: "/chat", isImage: true },
+    { icon: "/cribby-idea.png", label: "AI Assistance", href: "/chat", isImage: true },
   ];
 
   const menuItems = role === "Teacher" ? teacherItems : studentItems;

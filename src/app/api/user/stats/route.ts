@@ -270,10 +270,10 @@ export async function POST(req: Request) {
       
       const getDiscount = (billType: string) => {
         if (billType === 'electricity') {
-          if (purchasedItems.includes('solar_panels')) return 0.7; // 30% reduction
-          if (purchasedItems.includes('wind_turbine')) return 0.6; // 40% reduction
           if (purchasedItems.includes('Tesla Powerwall')) return 0.2;
           if (purchasedItems.includes('Solar Battery')) return 0.5;
+          if (purchasedItems.includes('wind_turbine')) return 0.6;
+          if (purchasedItems.includes('solar_panels') || purchasedItems.includes('Solar Array')) return 0.7; // 30% reduction
           return 1;
         }
         if (billType === 'water') {
