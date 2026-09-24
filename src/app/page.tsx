@@ -1,51 +1,32 @@
-export default function Page() {
+export default function Home() {
   return (
-    <main style={{
-      maxWidth: 980,
-      margin: "0 auto",
-      padding: "64px 24px 120px",
-      fontFamily: "Arial, sans-serif",
-      color: "#111827",
-      lineHeight: 1.6,
-    }}>
-      <header style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <div style={{ width: 42, height: 42, borderRadius: 12, background: "#4f46e5" }} />
-          <strong style={{ fontSize: 28 }}>ClassCrib</strong>
-        </div>
-        <h1 style={{ fontSize: 48, lineHeight: 1.1, margin: "0 0 16px" }}>
-          Where School Homework Meets Wealth.
-        </h1>
-        <p style={{ fontSize: 20, maxWidth: 720, margin: 0 }}>
-          Join our pilot community of students and teachers as we test and improve ClassCrib together.
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        padding: "2rem",
+        fontFamily: "Arial, sans-serif",
+        background: "#f5f5f5",
+        color: "#111827",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 720,
+          textAlign: "center",
+          background: "#ffffff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 18,
+          padding: "3rem",
+          boxShadow: "0 8px 24px rgba(0,0,0,0.04)",
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: "2.5rem" }}>ClassCrib</h1>
+        <p style={{ marginTop: "1rem", lineHeight: 1.6, fontSize: "1.05rem" }}>
+          Default app page restored.
         </p>
-      </header>
-
-      <section style={{ display: "grid", gap: 24, marginTop: 40 }}>
-        <div style={{ padding: 20, border: "1px solid #e5e7eb", borderRadius: 18, background: "#f9fafb" }}>
-          <h2 style={{ margin: "0 0 12px", fontSize: 22 }}>Privacy & UAE PDPL</h2>
-          <p style={{ margin: 0 }}>
-            ClassCrib approaches privacy and security in the UAE with a clear compliance-first model for pilot use.
-          </p>
-        </div>
-
-        <div style={{ padding: 20, border: "1px solid #e5e7eb", borderRadius: 18, background: "#f9fafb" }}>
-          <h2 style={{ margin: "0 0 12px", fontSize: 22 }}>Support</h2>
-          <p style={{ margin: 0 }}>
-            Email: <a href="mailto:support@classcrib.ae" style={{ color: "#4f46e5" }}>support@classcrib.ae</a>
-          </p>
-        </div>
-
-        <div style={{ padding: 20, border: "1px solid #e5e7eb", borderRadius: 18, background: "#f9fafb" }}>
-          <h2 style={{ margin: "0 0 12px", fontSize: 22 }}>Partner brands</h2>
-          <p style={{ margin: 0, fontWeight: 700, letterSpacing: 1.1 }}>SECURED TECH</p>
-        </div>
-
-        <div style={{ padding: 20, border: "1px solid #e5e7eb", borderRadius: 18, background: "#f9fafb" }}>
-          <h2 style={{ margin: "0 0 12px", fontSize: 22 }}>Pilot stage note</h2>
-          <p style={{ margin: 0 }}>Pilot feedback will be shared as it becomes available.</p>
-        </div>
-      </section>
+      </div>
     </main>
   );
 }
