@@ -18,7 +18,7 @@ const UserSchema = new Schema({
   },
   role: {
     type: String,
-    enum: ['Teacher', 'Student', 'SchoolAdmin', 'Parent'],
+    enum: ['Teacher', 'Student', 'SchoolAdmin', 'Parent', 'PlatformAdmin'],
     default: 'Student',
   },
   dob: {

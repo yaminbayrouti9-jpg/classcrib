@@ -27,11 +27,13 @@ async function getPlatformAdminId() {
       .map((username) => username.trim().toLowerCase())
       .filter(Boolean),
   );
-  if (!userId || !allowedUsernames.size) return null;
+  if (!userId) return null;
 
   await dbConnect();
-  const user = await User.findById(userId).select("username").lean();
-  return user && allowedUsernames.has(user.username) ? user._id : null;
+  const user = await User.findById(userId).select("username role").lean();
+  if (!user || (user.role !== "PlatformAdmin" &&
+      !(user.role === "SchoolAdmin" && allowedUsernames.has(user.username)))) return null;
+  return user._id;
 }
 
 export async function GET() {

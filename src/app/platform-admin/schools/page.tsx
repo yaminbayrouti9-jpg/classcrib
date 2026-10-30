@@ -19,6 +19,7 @@ export default function PlatformSchoolRequestsPage() {
   const [busyId, setBusyId] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const loadRequests = useCallback(async () => {
     setLoading(true);
@@ -27,9 +28,17 @@ export default function PlatformSchoolRequestsPage() {
       const response = await fetch("/api/platform-admin/school-requests");
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Unable to load school requests.");
+      setAccessDenied(false);
       setRequests(data.requests || []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Unable to load school requests.");
+      const errorMessage = loadError instanceof Error ? loadError.message : "Unable to load school requests.";
+      if (errorMessage === "Platform operator access required.") {
+        setAccessDenied(true);
+        setRequests([]);
+        setError("");
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -94,6 +103,14 @@ export default function PlatformSchoolRequestsPage() {
       {loading ? (
         <div className="flex items-center gap-3 rounded-2xl border border-card-border bg-card p-8 text-text-secondary">
           <Loader2 className="h-5 w-5 animate-spin" /> Loading requests…
+        </div>
+      ) : accessDenied ? (
+        <div role="alert" className="space-y-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-sm text-text-primary">
+          <h2 className="font-black">Operator access required</h2>
+          <p>
+            You are not signed in as a ClassCrib operator. School signup requests remain pending until an operator account is created and approved access is used here.
+          </p>
+          <p>Signing in as a student or school administrator does not grant operator approval access.</p>
         </div>
       ) : requests.length === 0 ? (
         <div className="rounded-2xl border border-card-border bg-card p-8 text-sm text-text-secondary">

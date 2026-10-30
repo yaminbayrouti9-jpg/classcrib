@@ -19,7 +19,8 @@ Required in production:
 - `NEXTAUTH_URL` — the canonical HTTPS origin used for authentication and parent invite links.
 - `OPENAI_API_KEY` — required for Cribby chat and teacher AI tools. Student prompts and optional images are sent to OpenAI; chat text is stored in ClassCrib. Review the provider contract, retention, region, and school consent before enabling the feature.
 - `SCHOOL_BOOTSTRAP_TOKEN` — temporary secret for the one-time initial school administrator setup endpoint. Remove it after the first administrator is provisioned.
-- `PLATFORM_ADMIN_USERNAMES` — comma-separated usernames allowed to review school signup requests at `/platform-admin/schools`. Provision operator accounts securely; do not make this list user-editable.
+- `PLATFORM_OPERATOR_SETUP_TOKEN` — high-entropy, one-time secret required to create the initial ClassCrib operator at `/platform-admin/setup`. Remove it immediately after setup.
+- `PLATFORM_ADMIN_USERNAMES` — optional legacy allowlist for existing `SchoolAdmin` accounts that need operator access to review signup requests. New operators use the separate `PlatformAdmin` role.
 - `CRON_SECRET` — secret bearer token used by the scheduled school-jobs endpoint.
 
 Optional:
@@ -30,16 +31,17 @@ Configure the deployment scheduler to invoke `/api/cron/school-jobs` daily with 
 
 ## School signup and operator review
 
-1. Provision the initial trusted ClassCrib operator account through the one-time bootstrap process, then set that account's username in `PLATFORM_ADMIN_USERNAMES` and redeploy. The allowlist is checked against an authenticated database user.
-2. Prospective schools use `/signup`, choose **School**, and submit school/contact details and proposed administrator credentials. This creates a pending request only; it does not create an active school or grant access.
-3. An allowlisted operator signs in and opens `/platform-admin/schools`. Verify the school's identity and contact independently before approving.
-4. Approval transactionally creates the school and its `SchoolAdmin` account. Rejection creates neither. The pending password hash is removed after a decision, which is recorded with reviewer and timestamp.
-5. Decision emails require `RESEND_API_KEY` and `SCHOOL_EMAIL_FROM`. Without those settings, the operator must contact the requester manually.
+1. Set a high-entropy `PLATFORM_OPERATOR_SETUP_TOKEN` in the deployment and deploy. Open `/platform-admin/setup` over HTTPS and enter the token, operator display name, username, and a password of at least 12 characters. This endpoint can create only one initial platform operator.
+2. After setup succeeds, remove `PLATFORM_OPERATOR_SETUP_TOKEN` from the deployment and redeploy. The operator then signs in through `/login`; their distinct `PlatformAdmin` role grants access to `/platform-admin/schools`.
+3. Prospective schools use `/signup`, choose **School**, and submit school/contact details and proposed administrator credentials. This creates a pending request only; it does not create an active school or grant access.
+4. The operator opens `/platform-admin/schools` and verifies the school's identity/contact independently before approving.
+5. Approval transactionally creates the school and its `SchoolAdmin` account. Rejection creates neither. The pending password hash is removed after a decision, which is recorded with reviewer and timestamp.
+6. Decision emails require `RESEND_API_KEY` and `SCHOOL_EMAIL_FROM`. Without those settings, the operator must contact the requester manually.
 
 ## School setup and production rollout
 
 1. Back up the database and remove demo accounts, test records, and anomalous balances using an authorized, reviewed data-cleanup procedure. This repository does not automatically delete production data.
-2. Use the one-time bootstrap endpoint with `SCHOOL_BOOTSTRAP_TOKEN` to create the initial trusted operator/school administrator. Keep the token secret and unset it after setup; configure that operator in `PLATFORM_ADMIN_USERNAMES`.
+2. Create the initial ClassCrib operator using `PLATFORM_OPERATOR_SETUP_TOKEN` as described above. `SCHOOL_BOOTSTRAP_TOKEN` remains available for the separate one-time direct school-admin bootstrap flow.
 3. Migrate legacy classes and users to their correct school and year groups before enabling cross-class features. Review duplicate usernames, existing indexes, and existing chat-report records before index creation.
 4. Configure each school's reward rules, feature switches, classes, and staff roles; verify that administrative approval workflows and daily limits match the school's policy.
 5. Supply school-approved Terms and Privacy Policy text. The current pages are placeholders and must not be treated as legal advice or as evidence of PDPL compliance.
