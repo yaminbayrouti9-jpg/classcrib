@@ -1,8 +1,24 @@
 # ClassCrib Client Operations Guide
 
-This guide describes the features available in the ClassCrib application and gives school staff practical setup steps. The instructions apply after the version containing commit `db94041` has been deployed to the school's ClassCrib site.
+This guide describes the features available in the ClassCrib application and gives school staff practical setup steps. The instructions apply after commit `5c0048a` (or a later release) has been deployed to the school's ClassCrib site.
 
 ClassCrib's coins, home, bills, and market are educational simulations. They do not process real payments, hold real money, or provide investment advice.
+
+### Latest update
+
+Commit `5c0048a` updates the public canonical/Open Graph URLs, sitemap, and robots sitemap to `classcrib.ae`, refreshes the meta description, and prevents rejected-assignment resubmissions from counting weekly challenge progress a second time.
+
+### Current platform operator account
+
+The initial platform operator account has already been created:
+
+- **Username:** `operator`
+- **Sign-in:** `https://classcrib.ae/login`
+- **Password:** Use the password provided separately by the account owner. It is intentionally not recorded in this guide or other source-controlled files.
+
+Because the password was shared in a chat, change it now: sign in, open **Settings** (`/settings`), choose **Security**, and set a new strong, unique password using the current password. Do not forward or publish the old or new password. If you cannot sign in, use the authorized password-reset or recovery process.
+
+The operator account is for platform-level school-request review. It is not a SchoolAdmin account and should not be used for routine school management.
 
 ## 1. Roles and access
 
@@ -16,14 +32,18 @@ Sign in at `https://classcrib.ae/login`. The app routes signed-in roles to their
 
 ## 2. Establish the platform operator and onboard a school
 
-### If a school administrator account already exists
+### Sign in with the existing operator account
 
-1. Sign in as a **SchoolAdmin**.
-2. Visit `/platform-admin/setup`.
-3. If the initial operator has not been created, enter the operator's display name, username, and a password of at least 12 characters, then create the account.
-4. Sign out and sign in with the operator credentials.
-5. Open `/platform-admin/schools` to review incoming school applications.
-6. Only one initial operator can be created. The setup page checks whether setup is already complete, and the server independently prevents a second creation.
+1. Open `https://classcrib.ae/login`.
+2. Sign in using username `operator` and the password provided separately by the account owner.
+3. Open `/platform-admin/schools` to review incoming school applications.
+4. Do not use `/platform-admin/setup` to create another operator; the initial account already exists and setup is one-time.
+
+If the operator cannot sign in, confirm the account is present in the deployed environment and use the authorized password-reset or recovery process. Do not create a second operator or send credentials through a public channel.
+
+### Initial operator setup (only if an operator has not been created)
+
+If setting up a separate deployment that has no operator yet, an existing **SchoolAdmin** can visit `/platform-admin/setup` and create the one-time operator account with a display name, username, and password of at least 12 characters. The setup page checks whether setup is complete, and the server prevents creating a second initial operator. Sign out of SchoolAdmin, then sign in with the newly created operator credentials.
 
 ### Approve a new school
 
