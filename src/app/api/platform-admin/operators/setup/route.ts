@@ -1,26 +1,20 @@
 import { NextResponse } from "next/server";
-import { timingSafeEqual } from "crypto";
 import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/mongodb";
 import BootstrapClaim from "@/models/BootstrapClaim";
 import User from "@/models/User";
 
-function isValidSetupToken(provided: string | null, expected: string | undefined) {
-  if (!provided || !expected) return false;
-  const providedBuffer = Buffer.from(provided);
-  const expectedBuffer = Buffer.from(expected);
-  return providedBuffer.length === expectedBuffer.length &&
-    timingSafeEqual(providedBuffer, expectedBuffer);
-}
-
 export async function POST(req: Request) {
-  const setupToken = process.env.PLATFORM_OPERATOR_SETUP_TOKEN;
-  if (!setupToken) {
-    return NextResponse.json({ error: "Operator setup is not enabled." }, { status: 404 });
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Sign in with a school administrator account to set up the operator." }, { status: 401 });
   }
-  if (!isValidSetupToken(req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") || null, setupToken)) {
-    return NextResponse.json({ error: "Invalid operator setup token." }, { status: 401 });
+  const actor = session.user as { id?: string; role?: string };
+  if (actor.role !== "SchoolAdmin" || !actor.id) {
+    return NextResponse.json({ error: "Only a school administrator can create the initial platform operator." }, { status: 403 });
   }
 
   let body: unknown;
@@ -59,6 +53,9 @@ export async function POST(req: Request) {
       }
 
       await BootstrapClaim.create([{ _id: "initial-platform-operator" }], { session: mongoSession });
+      if (!await User.exists({ _id: actor.id, role: "SchoolAdmin" }).session(mongoSession)) {
+        throw new Error("SCHOOL_ADMIN_REQUIRED");
+      }
       const [operator] = await User.create([{
         username: normalizedUsername,
         displayName: displayName.trim(),
@@ -73,6 +70,9 @@ export async function POST(req: Request) {
   } catch (error) {
     if (error instanceof Error && error.message === "OPERATOR_SETUP_ALREADY_COMPLETED") {
       return NextResponse.json({ error: "Initial operator setup has already been completed." }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "SCHOOL_ADMIN_REQUIRED") {
+      return NextResponse.json({ error: "Your school administrator access could not be verified." }, { status: 403 });
     }
     if (error && typeof error === "object" && "code" in error && error.code === 11000) {
       return NextResponse.json({ error: "Operator setup has already been claimed or the username is in use." }, { status: 409 });

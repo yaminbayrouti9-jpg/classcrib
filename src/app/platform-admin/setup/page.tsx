@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import { FormEvent, useState } from "react";
+import { signOut, useSession } from "next-auth/react";
 import { Loader2, ShieldCheck } from "lucide-react";
 
 export default function PlatformOperatorSetupPage() {
-  const [setupToken, setSetupToken] = useState("");
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [complete, setComplete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { data: session, status } = useSession();
+  const role = (session?.user as { role?: string } | undefined)?.role;
 
   const createOperator = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -23,14 +25,12 @@ export default function PlatformOperatorSetupPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${setupToken}`,
         },
         body: JSON.stringify({ username, displayName, password }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Unable to create the operator account.");
       setComplete(true);
-      setSetupToken("");
       setPassword("");
     } catch (setupError) {
       setError(setupError instanceof Error ? setupError.message : "Unable to create the operator account.");
@@ -49,32 +49,39 @@ export default function PlatformOperatorSetupPage() {
           <p className="text-xs font-black uppercase tracking-widest text-primary">One-time secure setup</p>
           <h1 className="mt-2 text-3xl font-black text-text-primary">Create ClassCrib operator</h1>
           <p className="mt-3 text-sm leading-6 text-text-secondary">
-            This creates the initial ClassCrib operator account used to review school signup requests.
-            It requires a private setup token from your deployment environment and can only be completed once.
+            A signed-in school administrator can create the initial ClassCrib operator account. This setup is available only once for the entire platform.
           </p>
         </div>
 
-        {complete ? (
+        {status === "loading" ? (
+          <div className="flex items-center gap-3 text-sm text-text-secondary">
+            <Loader2 className="h-4 w-4 animate-spin" /> Checking your account…
+          </div>
+        ) : !session?.user ? (
+          <div className="space-y-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 text-sm text-text-primary">
+            <p>Sign in with an existing school administrator account before creating the first operator.</p>
+            <Link href="/login" className="inline-flex rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white">
+              Sign in
+            </Link>
+          </div>
+        ) : role !== "SchoolAdmin" ? (
+          <div role="alert" className="space-y-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-5 text-sm text-text-primary">
+            <p className="font-bold">School administrator access is required.</p>
+            <p>Your current account cannot create the initial ClassCrib operator.</p>
+            <button type="button" onClick={() => void signOut({ callbackUrl: "/login" })} className="rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white">
+              Sign out
+            </button>
+          </div>
+        ) : complete ? (
           <div role="status" className="space-y-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 text-sm text-text-primary">
             <p className="font-bold">Operator account created. The setup endpoint can no longer be used.</p>
-            <p>Remove `PLATFORM_OPERATOR_SETUP_TOKEN` from your deployment environment, then sign in with the username and password you just created.</p>
-            <Link href="/login" className="inline-flex rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white">
-              Go to sign in
-            </Link>
+            <p>Sign out of this school admin account, then sign in as the operator you just created to review school requests.</p>
+            <button type="button" onClick={() => void signOut({ callbackUrl: "/login" })} className="inline-flex rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white">
+              Sign out and go to login
+            </button>
           </div>
         ) : (
           <form onSubmit={createOperator} className="space-y-4">
-            <label className="block text-xs font-bold text-text-secondary">
-              One-time setup token
-              <input
-                type="password"
-                required
-                autoComplete="off"
-                value={setupToken}
-                onChange={(event) => setSetupToken(event.target.value)}
-                className="mt-2 w-full rounded-xl border border-card-border bg-background p-3 text-sm"
-              />
-            </label>
             <label className="block text-xs font-bold text-text-secondary">
               Operator display name
               <input

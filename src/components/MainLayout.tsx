@@ -25,6 +25,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
 
   const isPublicPage = pathname === "/" || pathname === "/login" || pathname === "/signup";
+  const isPlatformAdminPage = pathname === "/platform-admin" || pathname?.startsWith("/platform-admin/");
 
   useEffect(() => {
     if (session && !isPublicPage) {
@@ -79,19 +80,19 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   const isWorkspace = pathname?.includes("/classes/") && pathname?.split("/").length > 2;
 
-  if (!isMounted && !isPublicPage) return <div className="min-h-screen bg-background" suppressHydrationWarning />;
+  if (!isMounted && !isPublicPage && !isPlatformAdminPage) return <div className="min-h-screen bg-background" suppressHydrationWarning />;
 
   return (
     <div className="flex" suppressHydrationWarning>
-      {!isPublicPage && <SidebarWrapper />}
+      {!isPublicPage && !isPlatformAdminPage && <SidebarWrapper />}
       <div className={clsx(
         "flex-1 min-h-screen flex flex-col transition-all",
-        !isPublicPage ? "ml-64" : "ml-0"
+        !isPublicPage && !isPlatformAdminPage ? "ml-64" : "ml-0"
       )} suppressHydrationWarning>
-        {!isPublicPage && <TopBarWrapper />}
+        {!isPublicPage && !isPlatformAdminPage && <TopBarWrapper />}
         <main className={clsx(
           "flex-1",
-          !isPublicPage && !isWorkspace && "p-10",
+          !isPublicPage && !isWorkspace && !isPlatformAdminPage && "p-10",
           isWorkspace && "h-[calc(100vh-80px)] overflow-hidden"
         )} suppressHydrationWarning>
           {children}
