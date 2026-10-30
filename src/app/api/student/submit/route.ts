@@ -62,6 +62,7 @@ export async function POST(req: Request) {
       task: taskId,
       status: 'Rejected'
     });
+    const isResubmission = Boolean(existingRejected);
 
     let submission;
     if (existingRejected) {
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
 
     // 2. Update Weekly Challenge Progress
     const user = await User.findById((session.user as any).id);
-    if (user && user.currentChallenge) {
+    if (user && user.currentChallenge && !isResubmission) {
       // Find correctly mapped category
       const typeMap: Record<string, string> = {
         'Homework': 'Academic',

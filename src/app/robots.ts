@@ -26,6 +26,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: "https://classcrib.com/sitemap.xml",
+    sitemap: "https://classcrib.ae/sitemap.xml",
   };
 }

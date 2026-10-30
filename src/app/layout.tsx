@@ -12,15 +12,15 @@ export const metadata: Metadata = {
     default: "ClassCrib – Gamified Student Productivity & Financial Literacy",
     template: "%s | ClassCrib"
   },
-  description: "ClassCrib turns school assignments into a live virtual economy. Students earn coins, manage utility bills, invest in sustainable upgrades, and design their dream 3D home — all powered by real homework.",
+  description: "ClassCrib helps UAE schools manage assignments and student progress through a gamified virtual coin economy and financial-literacy activities.",
   keywords: ["education", "gamified learning", "homework tracker", "financial literacy", "UAE school", "student productivity"],
   authors: [{ name: "ClassCrib" }],
   creator: "ClassCrib",
-  metadataBase: new URL("https://classcrib.com"),
+  metadataBase: new URL("https://classcrib.ae"),
   openGraph: {
     title: "ClassCrib – Where Homework Meets Wealth",
     description: "A gamified educational productivity platform for UAE schools. Students earn coins from assignments and manage a virtual economy.",
-    url: "https://classcrib.com",
+    url: "https://classcrib.ae",
     siteName: "ClassCrib",
     locale: "en_AE",
     type: "website",
