@@ -60,6 +60,7 @@ interface AdminUser {
 interface AdminClass {
   _id: string;
   name: string;
+  students?: AdminUser[];
 }
 
 interface SchoolReport {
@@ -164,6 +165,17 @@ export default function SchoolAdminPage() {
   const [teacherUsername, setTeacherUsername] = useState("");
   const [teacherDisplayName, setTeacherDisplayName] = useState("");
   const [teacherPassword, setTeacherPassword] = useState("");
+  const [studentUsername, setStudentUsername] = useState("");
+  const [studentDisplayName, setStudentDisplayName] = useState("");
+  const [studentPassword, setStudentPassword] = useState("");
+  const [studentSchoolYear, setStudentSchoolYear] = useState("");
+  const [studentTeam, setStudentTeam] = useState("");
+  const [studentClassIds, setStudentClassIds] = useState<string[]>([]);
+  const [parentUsername, setParentUsername] = useState("");
+  const [parentDisplayName, setParentDisplayName] = useState("");
+  const [parentEmail, setParentEmail] = useState("");
+  const [parentPassword, setParentPassword] = useState("");
+  const [parentStudentId, setParentStudentId] = useState("");
   const [classIds, setClassIds] = useState<string[]>([]);
   const [className, setClassName] = useState("");
   const [classTeacherId, setClassTeacherId] = useState("");
@@ -303,6 +315,53 @@ export default function SchoolAdminPage() {
     }
   };
 
+  const createStudent = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    let created = false;
+    try {
+      const response = await fetch("/api/school/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          users: [{
+            username: studentUsername,
+            displayName: studentDisplayName,
+            password: studentPassword,
+            role: "Student",
+            schoolYear: studentSchoolYear || undefined,
+            team: studentTeam || undefined,
+          }],
+          classIds: studentClassIds,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to create student account.");
+      setMessage(`Student account @${data.importedUsernames?.[0] || studentUsername.trim().toLowerCase()} created and added to ${studentClassIds.length} class${studentClassIds.length === 1 ? "" : "es"}. Share the temporary password securely with the student.`);
+      setStudentUsername("");
+      setStudentDisplayName("");
+      setStudentPassword("");
+      setStudentSchoolYear("");
+      setStudentTeam("");
+      setStudentClassIds([]);
+      created = true;
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Unable to create student account.");
+    } finally {
+      setBusy(false);
+    }
+
+    if (created) {
+      try {
+        await load();
+      } catch (refreshError) {
+        setError(`Student account was created, but school data could not be refreshed: ${refreshError instanceof Error ? refreshError.message : "Unknown error."}`);
+      }
+    }
+  };
+
   const importTeachers = async () => {
     setBusy(true);
     setError("");
@@ -329,6 +388,47 @@ export default function SchoolAdminPage() {
         await load();
       } catch (refreshError) {
         setError(`Teacher accounts were created, but the list could not be refreshed: ${refreshError instanceof Error ? refreshError.message : "Unknown error."}`);
+      }
+    }
+  };
+
+  const createParent = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    let created = false;
+    try {
+      const response = await fetch("/api/school/parents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: parentUsername,
+          displayName: parentDisplayName,
+          email: parentEmail,
+          password: parentPassword,
+          studentId: parentStudentId,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to create the parent account.");
+      setMessage(`Parent account @${data.username} created and linked to the selected student. Give the login details to the parent through a secure channel.`);
+      setParentUsername("");
+      setParentDisplayName("");
+      setParentEmail("");
+      setParentPassword("");
+      created = true;
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Unable to create the parent account.");
+    } finally {
+      setBusy(false);
+    }
+
+    if (created) {
+      try {
+        await load();
+      } catch (refreshError) {
+        setError(`Parent account was created, but the school data could not be refreshed: ${refreshError instanceof Error ? refreshError.message : "Unknown error."}`);
       }
     }
   };
@@ -575,6 +675,87 @@ export default function SchoolAdminPage() {
         ) : <p className="mt-4 text-sm text-text-tertiary">No teacher accounts yet. Create one or import a CSV.</p>}
       </section>
 
+      <section className="rounded-2xl border border-card-border bg-card p-6">
+        <h2 className="text-xl font-black text-text-primary">Create parent account and link a student</h2>
+        <p className="mt-1 text-sm text-text-secondary">
+          Create a read-only parent login directly. The selected student is linked automatically when the account is created.
+        </p>
+        {(() => {
+          const students = Array.from(new Map(
+            classes.flatMap((classItem) => classItem.students || []).map((student) => [student._id, student]),
+          ).values());
+          return (
+            <form onSubmit={createParent} className="mt-4 grid gap-3 md:grid-cols-2">
+              <input
+                value={parentDisplayName}
+                onChange={(event) => setParentDisplayName(event.target.value)}
+                placeholder="Parent or guardian full name"
+                minLength={2}
+                maxLength={100}
+                required
+                className="rounded-xl border border-card-border bg-background p-3 text-sm"
+              />
+              <input
+                type="email"
+                value={parentEmail}
+                onChange={(event) => setParentEmail(event.target.value)}
+                placeholder="Parent email"
+                maxLength={254}
+                required
+                className="rounded-xl border border-card-border bg-background p-3 text-sm"
+              />
+              <input
+                value={parentUsername}
+                onChange={(event) => setParentUsername(event.target.value)}
+                placeholder="Login username"
+                minLength={3}
+                maxLength={32}
+                pattern="[A-Za-z0-9._-]+"
+                autoComplete="username"
+                required
+                className="rounded-xl border border-card-border bg-background p-3 text-sm"
+              />
+              <input
+                type="password"
+                value={parentPassword}
+                onChange={(event) => setParentPassword(event.target.value)}
+                placeholder="Temporary password (10+ characters)"
+                minLength={10}
+                maxLength={128}
+                autoComplete="new-password"
+                required
+                className="rounded-xl border border-card-border bg-background p-3 text-sm"
+              />
+              <label className="text-xs font-bold text-text-secondary md:col-span-2">
+                Link to student
+                <select
+                  value={parentStudentId}
+                  onChange={(event) => setParentStudentId(event.target.value)}
+                  required
+                  className="mt-2 block w-full rounded-xl border border-card-border bg-background p-3 text-sm font-normal"
+                >
+                  <option value="">Select a student</option>
+                  {students.map((student) => (
+                    <option key={student._id} value={student._id}>
+                      {student.displayName || student.username} (@{student.username})
+                    </option>
+                  ))}
+                </select>
+                {!students.length && <span className="mt-2 block font-normal text-amber-700">Create or import students and add them to a class before linking a parent account.</span>}
+              </label>
+              <div className="md:col-span-2">
+                <button type="submit" disabled={busy || !students.length} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white disabled:opacity-50">
+                  {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Create parent login and link student
+                </button>
+                <p className="mt-3 text-xs text-text-tertiary">
+                  Send the username and temporary password privately. The parent signs in at /login and views the linked student at /parent. Never share credentials in a public class chat.
+                </p>
+              </div>
+            </form>
+          );
+        })()}
+      </section>
+
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-card-border bg-card p-6">
           <h2 className="text-xl font-black text-text-primary">Activity pulse</h2>
@@ -614,6 +795,91 @@ export default function SchoolAdminPage() {
             {!report.hallOfFame?.length && <li className="rounded-xl bg-card-hover px-4 py-3 text-sm text-text-tertiary">No student activity yet.</li>}
           </ol>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-card-border bg-card p-6">
+        <h2 className="text-xl font-black text-text-primary">Create student account</h2>
+        <p className="mt-1 text-sm text-text-secondary">
+          Create a student login and add the student to one or more classes in your school.
+        </p>
+        <form onSubmit={createStudent} className="mt-4 grid gap-3 md:grid-cols-2">
+          <input
+            value={studentDisplayName}
+            onChange={(event) => setStudentDisplayName(event.target.value)}
+            placeholder="Student full name"
+            minLength={2}
+            maxLength={100}
+            required
+            className="rounded-xl border border-card-border bg-background p-3 text-sm"
+          />
+          <input
+            value={studentUsername}
+            onChange={(event) => setStudentUsername(event.target.value)}
+            placeholder="Username"
+            minLength={3}
+            maxLength={32}
+            pattern="[A-Za-z0-9._-]+"
+            autoComplete="username"
+            required
+            className="rounded-xl border border-card-border bg-background p-3 text-sm"
+          />
+          <input
+            type="password"
+            value={studentPassword}
+            onChange={(event) => setStudentPassword(event.target.value)}
+            placeholder="Temporary password (10+ characters)"
+            minLength={10}
+            maxLength={128}
+            autoComplete="new-password"
+            required
+            className="rounded-xl border border-card-border bg-background p-3 text-sm"
+          />
+          <input
+            value={studentSchoolYear}
+            onChange={(event) => setStudentSchoolYear(event.target.value)}
+            placeholder="Year group (optional)"
+            maxLength={40}
+            className="rounded-xl border border-card-border bg-background p-3 text-sm"
+          />
+          <input
+            value={studentTeam}
+            onChange={(event) => setStudentTeam(event.target.value)}
+            placeholder="House / team (optional)"
+            maxLength={80}
+            className="rounded-xl border border-card-border bg-background p-3 text-sm"
+          />
+          <fieldset className="rounded-xl border border-card-border p-3 md:col-span-2">
+            <legend className="px-2 text-xs font-bold text-text-secondary">Add to class (select at least one)</legend>
+            {classes.length ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {classes.map((classItem) => (
+                  <label key={classItem._id} className="flex items-center gap-2 text-sm text-text-secondary">
+                    <input
+                      type="checkbox"
+                      checked={studentClassIds.includes(classItem._id)}
+                      onChange={(event) => setStudentClassIds((current) =>
+                        event.target.checked
+                          ? [...current, classItem._id]
+                          : current.filter((id) => id !== classItem._id),
+                      )}
+                    />
+                    {classItem.name}
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-amber-700">Create a class and assign a teacher before creating a student login.</p>
+            )}
+          </fieldset>
+          <div className="md:col-span-2">
+            <button type="submit" disabled={busy || !classes.length || !studentClassIds.length} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white disabled:opacity-50">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Create student account
+            </button>
+            <p className="mt-3 text-xs text-text-tertiary">
+              Give the student their username and temporary password securely. You can also import multiple students from CSV below.
+            </p>
+          </div>
+        </form>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-2">
