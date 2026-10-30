@@ -17,7 +17,8 @@ import {
   Unlock,
   CheckCircle2,
   AlertCircle,
-  Trash2
+  Trash2,
+  Flag
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -29,7 +30,7 @@ export default function ClassWorkspace() {
   const { id } = useParams();
   const router = useRouter();
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<'posts' | 'assignments' | 'settings' | 'students'>('posts');
+  const [activeTab, setActiveTab] = useState<'posts' | 'assignments' | 'settings' | 'students' | 'reports'>('posts');
   const [searchUsername, setSearchUsername] = useState("");
   const [isAddingStudent, setIsAddingStudent] = useState(false);
   const [addError, setAddError] = useState("");
@@ -39,6 +40,10 @@ export default function ClassWorkspace() {
   const [loading, setLoading] = useState(true);
   const [newPost, setNewPost] = useState("");
   const [posting, setPosting] = useState(false);
+  const [reportingPost, setReportingPost] = useState<string | null>(null);
+  const [isSchoolAdmin, setIsSchoolAdmin] = useState(false);
+  const [chatReports, setChatReports] = useState<any[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
   const feedRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -59,6 +64,7 @@ export default function ClassWorkspace() {
         setClassData(data.class);
         setAssignments(data.assignments);
         setIsTeacher(data.isTeacher);
+        setIsSchoolAdmin(data.isSchoolAdmin);
       } else {
         router.push('/classes');
       }
@@ -134,6 +140,56 @@ export default function ClassWorkspace() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleReportPost = async (postId: string) => {
+    if (!confirm("Report this message to your teacher?")) return;
+    setReportingPost(postId);
+    try {
+      const res = await fetch(`/api/classes/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reportPostId: postId }),
+      });
+      const data = await res.json();
+      if (!res.ok) alert(data.error || "Unable to submit report.");
+      else alert("Report sent to your teacher.");
+    } catch (error) {
+      console.error("Chat report failed:", error);
+      alert("Unable to submit report. Please try again.");
+    } finally {
+      setReportingPost(null);
+    }
+  };
+
+  const loadChatReports = async () => {
+    setLoadingReports(true);
+    try {
+      const response = await fetch(`/api/classes/${id}/reports`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to load reported messages.");
+      setChatReports(data.reports || []);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to load reported messages.");
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  const reviewChatReport = async (reportId: string, status: "Reviewed" | "Dismissed") => {
+    const resolution = window.prompt("Optional review note for the reporter.") || "";
+    try {
+      const response = await fetch(`/api/classes/${id}/reports`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reportId, status, resolution }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to review report.");
+      await loadChatReports();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Unable to review report.");
     }
   };
 
@@ -219,6 +275,12 @@ export default function ClassWorkspace() {
                 icon={Settings} 
                 label="Settings" 
               />
+              {(isTeacher || isSchoolAdmin) && <TabButton
+                active={activeTab === 'reports'}
+                onClick={() => { setActiveTab('reports'); loadChatReports(); }}
+                icon={Flag}
+                label="Reports"
+              />}
            </div>
            
            <div className="mt-auto p-6 border-t border-card-border">
@@ -253,7 +315,7 @@ export default function ClassWorkspace() {
                         </div>
                       ) : (
                         classData.posts.map((post: any, i: number) => (
-                          <div key={i} className="flex gap-4 group">
+                          <div key={post._id || i} className="flex gap-4 group">
                              <div className={clsx(
                                "w-10 h-10 rounded-xl shrink-0 flex items-center justify-center font-bold text-sm shadow-sm",
                                post.role === 'Teacher' ? "bg-primary text-white" : "bg-card border border-card-border text-text-secondary"
@@ -268,6 +330,15 @@ export default function ClassWorkspace() {
                                    </span>
                                    {post.role === 'Teacher' && (
                                      <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-[8px] font-black rounded uppercase border border-primary/20">Teacher</span>
+                                   )}
+                                   {post.author?.toString() !== (session?.user as any)?.id && (
+                                     <button
+                                       onClick={() => handleReportPost(post._id)}
+                                       disabled={!post._id || reportingPost === post._id}
+                                       className="ml-auto inline-flex items-center gap-1 text-[9px] font-bold text-text-tertiary hover:text-rose-500 disabled:opacity-50"
+                                     >
+                                       <Flag className="h-3 w-3" /> Report
+                                     </button>
                                    )}
                                 </div>
                                 <div className="bg-card border border-card-border p-4 rounded-2xl rounded-tl-none shadow-sm text-sm text-text-secondary leading-relaxed">
@@ -425,12 +496,69 @@ export default function ClassWorkspace() {
                                   )} />
                                </button>
                             </div>
+                            {([
+                              ['allowClassChat', 'Class chat', 'Allow class members to view and use the chat.'],
+                              ['allowCoinGifts', 'Coin gifting', 'Allow students in this class to exchange coins.'],
+                              ['allowUsernameSearch', 'Username search', 'Allow students to find other users by username.'],
+                              ['allowLeaderboard', 'Leaderboard visibility', 'Include this class in leaderboard results.'],
+                              ['allowTradingTerminal', 'Trading Terminal', 'Allow students to use the simulated trading terminal.'],
+                              ['allowCribbyAI', 'Cribby AI', 'Allow students in this class to use Cribby AI.'],
+                            ] as const).map(([key, label, description]) => (
+                              <div key={key} className="flex items-center justify-between border-t border-card-border pt-5">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-black text-text-primary">{label}</p>
+                                  <p className="text-xs text-text-tertiary font-medium">{description}</p>
+                                </div>
+                                <button
+                                  onClick={() => isTeacher && togglePermission(key, classData.settings?.[key] === false)}
+                                  aria-label={`${label} ${classData.settings?.[key] === false ? 'disabled' : 'enabled'}`}
+                                  className={clsx(
+                                    "w-14 h-8 rounded-full relative transition-all duration-300",
+                                    classData.settings?.[key] === false ? "bg-card-hover border border-card-border" : "bg-emerald-500 shadow-lg shadow-emerald-500/20",
+                                    !isTeacher && "opacity-50 cursor-not-allowed"
+                                  )}
+                                >
+                                  <div className={clsx(
+                                    "absolute top-1 w-6 h-6 rounded-full bg-white shadow-md transition-all duration-300",
+                                    classData.settings?.[key] === false ? "left-1" : "right-1"
+                                  )} />
+                                </button>
+                              </div>
+                            ))}
                          </div>
                       </div>
                    </div>
                 </motion.div>
               )}
-               {activeTab === 'students' && (
+              {activeTab === 'reports' && (isTeacher || isSchoolAdmin) && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="flex-1 space-y-5 overflow-y-auto p-8"
+                >
+                  <div>
+                    <h2 className="text-3xl font-black text-text-primary">Reported messages</h2>
+                    <p className="text-sm text-text-tertiary">Review reports and record a resolution.</p>
+                  </div>
+                  {loadingReports && <Loader2 className="h-6 w-6 animate-spin text-primary" />}
+                  {!loadingReports && chatReports.length === 0 && <p className="rounded-2xl border border-card-border bg-card p-6 text-sm text-text-tertiary">No reports for this class.</p>}
+                  {chatReports.map((report) => (
+                    <article key={report._id} className="rounded-2xl border border-card-border bg-card p-5">
+                      <p className="text-xs font-bold text-text-tertiary">Reported by {report.reporter?.displayName || report.reporter?.username} · {new Date(report.createdAt).toLocaleString()}</p>
+                      <div className="mt-3 rounded-xl bg-background p-4 text-sm text-text-primary">
+                        {report.post ? <><b>{report.post.authorName}:</b> {report.post.content}</> : "The reported message is no longer available."}
+                      </div>
+                      <p className="mt-2 text-xs text-text-tertiary">Status: {report.status}{report.resolution ? ` · ${report.resolution}` : ""}</p>
+                      {report.status === "Open" && <div className="mt-4 flex gap-2">
+                        <button onClick={() => reviewChatReport(report._id, "Reviewed")} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white">Reviewed</button>
+                        <button onClick={() => reviewChatReport(report._id, "Dismissed")} className="rounded-lg bg-card-hover px-3 py-2 text-xs font-black text-text-secondary">Dismiss</button>
+                      </div>}
+                    </article>
+                  ))}
+                </motion.div>
+              )}
+              {activeTab === 'students' && (
                 <motion.div 
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}

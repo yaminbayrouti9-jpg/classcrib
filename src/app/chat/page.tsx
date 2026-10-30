@@ -241,6 +241,9 @@ export default function AskCribbyPage() {
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-10 custom-scrollbar bg-gradient-to-b from-transparent to-primary/[0.02]">
+          <p className="mx-auto mb-4 max-w-5xl rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2 text-center text-xs font-semibold text-text-secondary">
+            Financial content is educational simulation only, not financial advice.
+          </p>
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center max-w-5xl mx-auto space-y-8 animate-fade-in py-2">
               {/* Header: Slim Row */}

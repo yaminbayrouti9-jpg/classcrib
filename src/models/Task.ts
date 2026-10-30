@@ -34,6 +34,26 @@ const TaskSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Class',
   },
+  classes: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Class',
+  }],
+  assignedStudents: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+  }],
+  attachments: [{
+    name: { type: String, required: true },
+    url: { type: String, required: true },
+  }],
+  recurrence: {
+    frequency: { type: String, enum: ['none', 'daily', 'weekly'], default: 'none' },
+    until: { type: Date },
+  },
+  nextOccurrenceAt: { type: Date },
+  occurrenceKey: { type: String, unique: true, sparse: true },
+  reminderSentAt: { type: Date },
+  postToClassChat: { type: Boolean, default: false },
   workspace: {
     type: Schema.Types.ObjectId,
     ref: 'Class',
@@ -50,6 +70,8 @@ const TaskSchema = new Schema({
     verified: { type: Boolean, default: true }
   }]
 }, { timestamps: true });
+
+TaskSchema.index({ "recurrence.frequency": 1, nextOccurrenceAt: 1 });
 
 if (mongoose.models.Task) {
   delete mongoose.models.Task;

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { usePathname } from "next/navigation";
 import SidebarWrapper from "./SidebarWrapper";
@@ -8,11 +8,13 @@ import { useSession } from "next-auth/react";
 import LevelUpPopover from "./LevelUpPopover";
 import TaxRaidPopover from "./TaxRaidPopover";
 import { clsx } from "clsx";
+import { fetchStatsOnce, invalidateStatsCache } from "@/lib/client-stats";
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
 
   const pathname = usePathname();
   const { data: session } = useSession();
+  const statsCacheKey = (session?.user as { id?: string } | undefined)?.id || session?.user?.email || "";
   const [isMounted, setIsMounted] = useState(false);
   const [levelUpData, setLevelUpData] = useState<{ level: number } | null>(null);
   const [showTaxRaid, setShowTaxRaid] = useState(false);
@@ -26,12 +28,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (session && !isPublicPage) {
+      const role = (session.user as { role?: string }).role;
+      if (role !== "Student") return;
+
       const checkStats = async () => {
         try {
-          const res = await fetch("/api/user/stats");
-          const data = await res.json();
+          const data = await fetchStatsOnce(statsCacheKey);
           if (data.success) {
-            if (data.stats.showLevelUp) setLevelUpData({ level: data.stats.level });
+            if (data.stats.showLevelUp) setLevelUpData({ level: Number(data.stats.level) });
             if (data.stats.showTaxRaid) setShowTaxRaid(true);
           }
         } catch (err) {
@@ -39,18 +43,19 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         }
       };
       checkStats();
-
     }
-  }, [session, pathname, isPublicPage]);
+  }, [session, statsCacheKey, pathname, isPublicPage]);
 
   const handleCloseLevelUp = async () => {
     if (!levelUpData) return;
     try {
-      await fetch("/api/user/stats", {
+      const response = await fetch("/api/user/stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "ackLevelUp" }),
       });
+      if (!response.ok) throw new Error("Unable to acknowledge level-up notice.");
+      invalidateStatsCache();
       setLevelUpData(null);
     } catch (err) {
       console.error("Failed to ack level up:", err);
@@ -59,20 +64,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   const handleCloseTaxRaid = async () => {
     try {
-      await fetch("/api/user/stats", {
+      const response = await fetch("/api/user/stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "ackTaxRaid" }),
       });
+      if (!response.ok) throw new Error("Unable to acknowledge utility notice.");
+      invalidateStatsCache();
       setShowTaxRaid(false);
     } catch (err) {
-      console.error("Failed to ack tax raid:", err);
+      console.error("Failed to ack utility notice:", err);
     }
   };
 
   const isWorkspace = pathname?.includes("/classes/") && pathname?.split("/").length > 2;
 
-  if (!isMounted) return <div className="min-h-screen bg-background" suppressHydrationWarning />;
+  if (!isMounted && !isPublicPage) return <div className="min-h-screen bg-background" suppressHydrationWarning />;
 
   return (
     <div className="flex" suppressHydrationWarning>
@@ -104,5 +111,3 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     </div>
   );
 }
-
-

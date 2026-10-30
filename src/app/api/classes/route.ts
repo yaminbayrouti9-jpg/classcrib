@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/mongodb";
 import Class from "@/models/Class";
 import { nanoid } from "nanoid";
+import User from "@/models/User";
 
 // GET /api/classes - List user's classes
 export async function GET() {
@@ -16,25 +17,15 @@ export async function GET() {
 
   try {
     let classes;
-    if (role === 'Teacher') {
-      classes = await Class.find({ teacher: userId }).sort({ createdAt: -1 });
+    if (role === 'SchoolAdmin') {
+      classes = await Class.find({ school: (session.user as any).schoolId })
+        .populate('teacher', 'username displayName')
+        .populate('students', 'username displayName')
+        .sort({ createdAt: -1 });
+    } else if (role === 'Teacher') {
+      classes = await Class.find({ teacher: userId }).populate('students', 'username displayName').sort({ createdAt: -1 });
     } else {
       classes = await Class.find({ students: userId }).sort({ createdAt: -1 });
-    }
-
-    // Lazy update for classes missing banners
-    const classesToUpdate = classes.filter(c => !c.banner);
-    if (classesToUpdate.length > 0) {
-      await Promise.all(classesToUpdate.map(c => {
-        const aiBanner = `https://image.pollinations.ai/prompt/A%20beautiful%20abstract%20modern%20educational%20banner%20for%20a%20class%20named%20${encodeURIComponent(c.name)},%20high%20resolution,%20cinematic%20lighting,%204k?width=800&height=400&nologo=true`;
-        return Class.findByIdAndUpdate(c._id, { banner: aiBanner });
-      }));
-      // Refresh list
-      if (role === 'Teacher') {
-        classes = await Class.find({ teacher: userId }).sort({ createdAt: -1 });
-      } else {
-        classes = await Class.find({ students: userId }).sort({ createdAt: -1 });
-      }
     }
 
     return NextResponse.json({ classes });
@@ -46,25 +37,40 @@ export async function GET() {
 // POST /api/classes - Create a new class (Teacher only)
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || (session.user as any).role !== 'Teacher') {
+  if (!session || !['Teacher', 'SchoolAdmin'].includes((session.user as any).role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   await dbConnect();
-  const { name, description, color } = await req.json();
+  const { name, description, color, teacherId: requestedTeacherId, yearGroup } = await req.json();
   const userId = (session.user as any).id;
 
   try {
-    // Generate an "AI-style" banner URL based on the class name
-    const aiBanner = `https://image.pollinations.ai/prompt/abstract%20education%20pattern%20for%20${encodeURIComponent(name)}?width=800&height=400&nologo=true&seed=${Math.floor(Math.random() * 1000)}`;
+    if (typeof name !== "string" || name.trim().length < 1 || name.trim().length > 120 ||
+        (description !== undefined && (typeof description !== "string" || description.length > 1000)) ||
+        (yearGroup !== undefined && (typeof yearGroup !== "string" || yearGroup.length > 40))) {
+      return NextResponse.json({ error: "Provide a class name up to 120 characters and valid optional details." }, { status: 400 });
+    }
+
+    const user = await User.findById(userId).select('school');
+    let teacherId = userId;
+    if ((session.user as any).role === 'SchoolAdmin') {
+      if (typeof requestedTeacherId !== 'string') {
+        return NextResponse.json({ error: "Select a teacher for this class." }, { status: 400 });
+      }
+      const teacher = await User.findOne({ _id: requestedTeacherId, role: "Teacher", school: user?.school });
+      if (!teacher) return NextResponse.json({ error: "Teacher must belong to your school." }, { status: 403 });
+      teacherId = teacher._id.toString();
+    }
 
     const newClass = await Class.create({
       name,
       description,
       inviteCode: nanoid(6).toUpperCase(),
-      teacher: userId,
+      teacher: teacherId,
+      school: user?.school,
       color: color || '#4F46E5',
-      banner: aiBanner,
+      yearGroup: typeof yearGroup === "string" ? yearGroup.trim() : undefined,
       students: [],
       posts: []
     });

@@ -6,125 +6,72 @@ import { authOptions } from '@/lib/auth';
 import { getLevelFromXp } from '@/lib/leveling';
 import Class from '@/models/Class';
 import Submission from '@/models/Submission';
-import Workspace from '@/models/Workspace';
+import School from '@/models/School';
+import { isStudentFeatureEnabled } from '@/lib/student-access';
+import mongoose from 'mongoose';
+import Transaction from '@/models/Transaction';
+import IdempotencyKey from '@/models/IdempotencyKey';
 
-// Helper to handle all user state updates in one go
+// This endpoint only reads state; economic changes belong to explicit POST actions.
 async function getUpdatedStats(userId: string) {
   await dbConnect();
-  
-  // Use non-lean to have access to .save()
-  const user = await User.findById(userId);
+  const user = await User.findById(userId)
+    .select("_id role school schoolYear workspaces classes coins xp greenXp level homeLevel assets purchasedItems electricityStatus lastElectricityPaid waterStatus lastWaterPaid lastTaxPaid taxStatus isTaxRaidPending createdAt lastViewedLevel weeklyEarnings weeklyCap dob")
+    .lean();
   if (!user) return null;
 
   const now = new Date();
   const createdAt = user.createdAt || new Date();
-
-  // 1. TIMESTAMPS (With fallback for legacy nested 'needs' object)
-  const lastElec = user.lastElectricityPaid || user.get('needs.lastElectricityPaid') ? new Date(user.lastElectricityPaid || user.get('needs.lastElectricityPaid')) : new Date(createdAt);
-  const lastWater = user.lastWaterPaid || user.get('needs.lastWaterPaid') ? new Date(user.lastWaterPaid || user.get('needs.lastWaterPaid')) : new Date(createdAt);
-  const lastTax = user.lastTaxPaid || user.get('needs.lastTaxPaid') ? new Date(user.lastTaxPaid || user.get('needs.lastTaxPaid')) : new Date(createdAt);
-  const lastFine = user.lastFinedAt || user.get('needs.lastFinedAt') ? new Date(user.lastFinedAt || user.get('needs.lastFinedAt')) : null;
-
-  // 2. MATH
+  const lastElec = new Date(user.lastElectricityPaid || createdAt);
+  const lastWater = new Date(user.lastWaterPaid || createdAt);
+  const lastTax = new Date(user.lastTaxPaid || createdAt);
   const msSinceElec = now.getTime() - lastElec.getTime();
   const msSinceWater = now.getTime() - lastWater.getTime();
   const msSinceTax = now.getTime() - lastTax.getTime();
-  const msSinceFine = lastFine ? (now.getTime() - lastFine.getTime()) : (86400000 * 365);
-
   const daysSinceElec = Math.floor(msSinceElec / 86400000);
   const daysSinceWater = Math.floor(msSinceWater / 86400000);
   const daysSinceTax = Math.floor(msSinceTax / 86400000);
 
-  // 3. STATUS DERIVATION
-  let elecStatus = 'Active';
-  if (daysSinceElec >= 30) elecStatus = 'Cut';
-  else if (daysSinceElec >= 25) elecStatus = 'Risk';
+  let elecStatus = user.role === 'Teacher' ? 'Not Applicable' : 'Active';
+  if (user.role === 'Student' && daysSinceElec >= 30) elecStatus = 'Cut';
+  else if (user.role === 'Student' && daysSinceElec >= 25) elecStatus = 'Risk';
 
-  let waterStatus = 'Active';
-  if (daysSinceWater >= 30) waterStatus = 'Cut';
-  else if (daysSinceWater >= 25) waterStatus = 'Risk';
+  let waterStatus = user.role === 'Teacher' ? 'Not Applicable' : 'Active';
+  if (user.role === 'Student' && daysSinceWater >= 30) waterStatus = 'Cut';
+  else if (user.role === 'Student' && daysSinceWater >= 25) waterStatus = 'Risk';
 
-  let taxStatus = 'Paid';
-  if (daysSinceTax >= 7) taxStatus = 'Raid';
-
-  let isTaxRaidPending = user.isTaxRaidPending || user.get('needs.isTaxRaidPending') || false;
-
-  // 4. ATOMIC FINE PROTECTION (HARD STOP)
-  let dbUpdated = false;
-
-  // If tax is overdue AND it's been at least 23.5 hours since last fine
-  if (daysSinceTax >= 7 && msSinceFine >= (23.5 * 3600 * 1000) && taxStatus !== 'Paid') {
-     user.coins = (user.coins || 0) - 1000;
-     user.lastFinedAt = now;
-     user.taxStatus = 'Raid';
-     user.isTaxRaidPending = true;
-     taxStatus = 'Raid';
-     isTaxRaidPending = true;
-     dbUpdated = true;
-  }
-
-  // Sync other statuses
-  if (user.electricityStatus !== elecStatus) {
-    user.electricityStatus = elecStatus;
-    dbUpdated = true;
-  }
-  if (user.waterStatus !== waterStatus) {
-    user.waterStatus = waterStatus;
-    dbUpdated = true;
-  }
-  if (user.taxStatus !== taxStatus) {
-    user.taxStatus = taxStatus;
-    dbUpdated = true;
-  }
-  if (user.isTaxRaidPending !== isTaxRaidPending) {
-    user.isTaxRaidPending = isTaxRaidPending;
-    dbUpdated = true;
-  }
-
-  // 5. Level Synchronization & Rewards
+  let taxStatus = user.role === 'Teacher' ? 'Not Applicable' : 'Paid';
+  if (user.role === 'Student' && daysSinceTax >= 7) taxStatus = 'Raid';
+  const isTaxRaidPending = user.role === 'Student' && Boolean(user.isTaxRaidPending);
   const correctLevel = getLevelFromXp(user.xp || 0);
-  if (user.level !== correctLevel) {
-    const oldLevel = user.level || 1;
-    user.level = correctLevel;
-    dbUpdated = true;
 
-    // Award level-up bonuses
-    if (correctLevel > oldLevel) {
-      // Award Coins (500 per level)
-      user.coins = (user.coins || 0) + (correctLevel - oldLevel) * 500;
-
-      // Special Unlocks
-      if (correctLevel >= 3 && !user.purchasedItems.includes('Cottage Base')) {
-        user.purchasedItems.push('Cottage Base');
-      }
-      if (correctLevel >= 5 && !user.purchasedItems.includes('Modern Villa')) {
-        user.purchasedItems.push('Modern Villa');
-      }
-      if (correctLevel >= 10 && !user.purchasedItems.includes('Mansion Style')) {
-        user.purchasedItems.push('Mansion Style');
-      }
-    }
+  const studentClasses = user.role === 'Student'
+    ? await Class.find({ _id: { $in: user.workspaces?.length ? user.workspaces : user.classes || [] } })
+        .select('students settings')
+    : [];
+  const school = user.school ? await School.findById(user.school).select('settings.allowLeaderboards settings.leaderboardScope') : null;
+  const leaderboardEnabled = school?.settings.allowLeaderboards !== false;
+  let visibleStudentIds = user.role === 'Student' && leaderboardEnabled
+    ? [...new Set(studentClasses
+        .filter((classDoc) => classDoc.settings?.allowLeaderboard !== false)
+        .flatMap((classDoc) => classDoc.students.map((studentId) => studentId.toString())))]
+    : [];
+  if (user.role === 'Student' && user.school && school?.settings.leaderboardScope !== 'class') {
+    const allowedClasses = await Class.find({ school: user.school, 'settings.allowLeaderboard': { $ne: false } }).select('students');
+    const allowedStudentIds = [...new Set(allowedClasses.flatMap((classDoc) => classDoc.students.map((id) => id.toString())))];
+    visibleStudentIds = school?.settings.leaderboardScope === 'year' && user.schoolYear
+      ? (await User.find({ role: 'Student', school: user.school, schoolYear: user.schoolYear, _id: { $in: allowedStudentIds } }).distinct('_id')).map((id) => id.toString())
+      : allowedStudentIds;
   }
-
-  // 6. Weekly Earnings Reset
-  const lastReset = user.lastWeeklyReset ? new Date(user.lastWeeklyReset) : new Date(createdAt);
-  const daysSinceReset = Math.floor((now.getTime() - lastReset.getTime()) / 86400000);
-  if (daysSinceReset >= 7) {
-    user.weeklyEarnings = 0;
-    user.lastWeeklyReset = now;
-    dbUpdated = true;
-  }
-
-  if (dbUpdated) {
-    await user.save();
-  }
-
-  const globalRank = await User.countDocuments({ role: 'Student', xp: { $gt: user.xp || 0 } }) + 1;
-  const topStudents = await User.find({ role: 'Student' })
-    .sort({ xp: -1 })
-    .limit(5)
-    .select('username xp level')
-    .lean();
+  const visibleStudentsFilter = { role: 'Student', privateMode: { $ne: true }, _id: { $in: visibleStudentIds } };
+  const globalRank = user.role === 'Student' && visibleStudentIds.includes(user._id.toString())
+    ? await User.countDocuments({ ...visibleStudentsFilter, xp: { $gt: user.xp || 0 } }) + 1
+    : null;
+  const topStudents = user.role === 'Student'
+    ? await User.find(visibleStudentsFilter).sort({ xp: -1 }).limit(5).select('username displayName xp level').lean()
+    : [];
+  const isFeatureEnabled = async (name: 'allowUsernameSearch' | 'allowCoinGifts' | 'allowClassChat' | 'allowTradingTerminal' | 'allowCribbyAI') =>
+    user.role !== 'Student' || await isStudentFeatureEnabled(user._id.toString(), name);
 
   let pendingVerifications = 0;
   if (user.role === 'Teacher') {
@@ -137,7 +84,15 @@ async function getUpdatedStats(userId: string) {
   }
 
   return {
-    ...user.toObject(),
+    coins: user.coins || 0,
+    xp: user.xp || 0,
+    greenXp: user.greenXp || 0,
+    homeLevel: user.homeLevel || 1,
+    assets: user.assets || {},
+    purchasedItems: user.purchasedItems || [],
+    dob: user.dob || null,
+    weeklyEarnings: user.weeklyEarnings || 0,
+    weeklyCap: user.weeklyCap || 5000,
     electricityStatus: elecStatus,
     waterStatus: waterStatus,
     taxStatus: taxStatus,
@@ -146,27 +101,37 @@ async function getUpdatedStats(userId: string) {
     lastTaxPaid: lastTax,
     globalRank,
     topStudents,
-    showLevelUp: (user.level || 1) > (user.lastViewedLevel || 1),
+    level: correctLevel,
+    showLevelUp: correctLevel > (user.lastViewedLevel || 1),
     showTaxRaid: isTaxRaidPending,
     dueDates: {
-      electricity: Math.max(0, 30 - daysSinceElec),
-      water: Math.max(0, 30 - daysSinceWater),
-      tax: Math.max(0, 7 - daysSinceTax)
+      electricity: user.role === 'Student' ? Math.max(0, 30 - daysSinceElec) : 0,
+      water: user.role === 'Student' ? Math.max(0, 30 - daysSinceWater) : 0,
+      tax: user.role === 'Student' ? Math.max(0, 7 - daysSinceTax) : 0
     },
-    pendingVerifications
+    pendingVerifications,
+    featureAccess: {
+      usernameSearch: await isFeatureEnabled('allowUsernameSearch'),
+      coinGifts: await isFeatureEnabled('allowCoinGifts'),
+      classChat: await isFeatureEnabled('allowClassChat'),
+      tradingTerminal: await isFeatureEnabled('allowTradingTerminal'),
+      cribbyAI: await isFeatureEnabled('allowCribbyAI'),
+      leaderboard: leaderboardEnabled && visibleStudentIds.includes(user._id.toString()),
+    }
   };
 }
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const stats = await getUpdatedStats((session.user as any).id);
+    const stats = await getUpdatedStats((session.user as { id: string }).id);
     return NextResponse.json({ success: true, stats }, {
       headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
     });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error('User stats request failed:', error);
+    return NextResponse.json({ error: 'Unable to load account statistics.' }, { status: 500 });
   }
 }
 
@@ -174,10 +139,39 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const userId = (session.user as any).id;
-    const body = await req.json();
-    const { action, type, itemId, assetId, quantity, pricePerUnit } = body;
+    const sessionUser = session.user as { id: string; role?: string };
+    const userId = sessionUser.id;
+    const role = sessionUser.role;
+    const body: unknown = await req.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Invalid request.' }, { status: 400 });
+    }
+    const { type, itemId, assetId, quantity, idempotencyKey } = body as Record<string, unknown>;
+    const action = typeof (body as Record<string, unknown>).action === 'string'
+      ? (body as Record<string, unknown>).action as string
+      : '';
     await dbConnect();
+
+    const studentOnlyActions = new Set([
+      'ackTaxRaid',
+      'buyAsset',
+      'sellAsset',
+      'purchase',
+      'payBill',
+      'payAll',
+    ]);
+    if (studentOnlyActions.has(action) && role !== 'Student') {
+      return NextResponse.json({ error: 'This feature is only available to students' }, { status: 403 });
+    }
+    if (['buyAsset', 'sellAsset'].includes(action) && role === 'Student') {
+      if (!(await isStudentFeatureEnabled(userId, 'allowTradingTerminal'))) {
+        return NextResponse.json({ error: 'Trading Terminal is disabled by a school administrator.' }, { status: 403 });
+      }
+      const studentClasses = await Class.find({ students: userId }).select('settings.allowTradingTerminal');
+      if (studentClasses.some((classDoc) => classDoc.settings?.allowTradingTerminal === false)) {
+        return NextResponse.json({ error: 'Trading Terminal is disabled by a class administrator.' }, { status: 403 });
+      }
+    }
 
     if (action === 'completeTutorial') {
        await User.findByIdAndUpdate(userId, { $set: { hasCompletedTutorial: true } });
@@ -185,11 +179,8 @@ export async function POST(req: Request) {
     }
 
     if (action === 'ackLevelUp') {
-       const user = await User.findById(userId);
-       if (user) {
-         user.lastViewedLevel = user.level || 1;
-         await user.save();
-       }
+       const user = await User.findById(userId).select('xp');
+       if (user) await User.updateOne({ _id: userId }, { $set: { lastViewedLevel: getLevelFromXp(user.xp || 0) } });
        return NextResponse.json({ success: true });
     }
 
@@ -204,129 +195,177 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, stats: await getUpdatedStats(userId) });
     }
 
+    const financialActions = new Set(['buyAsset', 'sellAsset', 'purchase', 'payBill', 'payAll']);
+    if (!financialActions.has(String(action))) return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    if (typeof idempotencyKey !== 'string' || idempotencyKey.length < 16 || idempotencyKey.length > 128) {
+      return NextResponse.json({ error: 'A valid request key is required. Please retry.' }, { status: 400 });
+    }
+
+    let marketPrice: number | undefined;
     if (action === 'buyAsset' || action === 'sellAsset') {
-      const user = await User.findById(userId);
-      if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-
-      const totalCost = quantity * pricePerUnit;
-      
-      if (!user.assets) user.assets = { gold: 0, silver: 0, cnc500: 0, business: 0, property: 0 };
-
-      if (action === 'buyAsset') {
-        if (user.coins < totalCost) return NextResponse.json({ error: 'Insufficient coins' }, { status: 400 });
-        user.coins -= totalCost;
-        (user.assets as any)[assetId] = ((user.assets as any)[assetId] || 0) + quantity;
-      } else {
-        if (((user.assets as any)[assetId] || 0) < quantity) return NextResponse.json({ error: 'Insufficient assets' }, { status: 400 });
-        user.coins += totalCost;
-        (user.assets as any)[assetId] = ((user.assets as any)[assetId] || 0) - quantity;
+      const assetIds = ['gold', 'silver', 'cnc500', 'business', 'property'] as const;
+      if (typeof assetId !== 'string' || !assetIds.includes(assetId as typeof assetIds[number]) ||
+          !Number.isSafeInteger(quantity) || Number(quantity) <= 0 || Number(quantity) > 1000) {
+        return NextResponse.json({ error: 'Invalid asset or quantity.' }, { status: 400 });
       }
-
-      await user.save();
-      return NextResponse.json({ success: true, stats: await getUpdatedStats(userId) });
+      const marketResponse = await fetch(new URL('/api/market/prices', req.url), { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+      if (!marketResponse.ok) return NextResponse.json({ error: 'Authoritative market prices are unavailable.' }, { status: 503 });
+      const market = await marketResponse.json();
+      const rawPrice = market.prices?.[assetId as typeof assetIds[number]];
+      if (typeof rawPrice !== 'number' || !Number.isFinite(rawPrice) || rawPrice <= 0) {
+        return NextResponse.json({ error: 'Invalid authoritative market price.' }, { status: 503 });
+      }
+      marketPrice = rawPrice;
     }
 
-    if (action === 'purchase') {
-      const user = await User.findById(userId);
-      if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const mongoSession = await mongoose.startSession();
+    try {
+      await mongoSession.withTransaction(async () => {
+        await IdempotencyKey.create([{ key: idempotencyKey, actor: userId, operation: `stats-${action}` }], { session: mongoSession });
 
-      const itemPrices: any = {
-        ai_turbo: 500,
-        zen_ambiance: 450,
-        focus_timer: 800,
-        pdf_export: 1200,
-        solar_panels: 5000,
-        wind_turbine: 7500,
-        business_seed: 5000,
-        real_estate: 15000,
-        smart_meter: 1500,
-      };
-
-      const price = itemPrices[itemId];
-      if (!price) return NextResponse.json({ error: 'Invalid item' }, { status: 400 });
-      if (user.coins < price) return NextResponse.json({ error: 'Insufficient coins' }, { status: 400 });
-
-      user.coins -= price;
-      
-      if (itemId === 'business_seed' || itemId === 'real_estate') {
-        if (!user.assets) user.assets = { gold: 0, silver: 0, cnc500: 0, business: 0, property: 0 };
-        if (itemId === 'business_seed') user.assets.business = (user.assets.business || 0) + price;
-        if (itemId === 'real_estate') user.assets.property = (user.assets.property || 0) + price;
-      } else {
-        if (!user.purchasedItems.includes(itemId)) {
-          user.purchasedItems.push(itemId);
+        if (action === 'buyAsset' || action === 'sellAsset') {
+          const asset = assetId as 'gold' | 'silver' | 'cnc500' | 'business' | 'property';
+          const quantityValue = Number(quantity);
+          const unitPrice = asset === 'business' ? (marketPrice as number) / 100 : marketPrice as number;
+          const total = Math.round(unitPrice * quantityValue * 100) / 100;
+          const assetPath = `assets.${asset}`;
+          const buying = action === 'buyAsset';
+          const updated = await User.findOneAndUpdate(
+            buying
+              ? { _id: userId, role: 'Student', coins: { $gte: total } }
+              : { _id: userId, role: 'Student', [assetPath]: { $gte: quantityValue } },
+            buying
+              ? { $inc: { coins: -total, [assetPath]: quantityValue } }
+              : { $inc: { coins: total, [assetPath]: -quantityValue } },
+            { new: true, session: mongoSession },
+          );
+          if (!updated) throw new Error(buying ? 'INSUFFICIENT_COINS' : 'INSUFFICIENT_ASSETS');
+          await Transaction.create([{
+            user: userId,
+            amount: buying ? -total : total,
+            type: 'Investment',
+            category: asset === 'gold' || asset === 'silver' || asset === 'cnc500' ? (asset === 'gold' ? 'Gold' : 'Business') : asset === 'business' ? 'Business' : 'Property',
+            description: `${buying ? 'Bought' : 'Sold'} ${quantityValue} ${asset}`,
+            reason: 'Virtual trading simulation',
+          }], { session: mongoSession });
+          return;
         }
-      }
 
-      await user.save();
-      return NextResponse.json({ success: true, stats: await getUpdatedStats(userId) });
+        if (action === 'purchase') {
+          const itemPrices: Record<string, number> = {
+            ai_turbo: 500, zen_ambiance: 450, focus_timer: 800, pdf_export: 1200,
+            solar_panels: 5000, wind_turbine: 7500, business_seed: 5000,
+            real_estate: 15000, smart_meter: 1500,
+          };
+          if (typeof itemId !== 'string' || !Object.hasOwn(itemPrices, itemId)) throw new Error('INVALID_ITEM');
+          const price = itemPrices[itemId];
+          const recurringAsset = itemId === 'business_seed' || itemId === 'real_estate';
+          const assetName = itemId === 'business_seed' ? 'business' : 'property';
+          const updated = await User.findOneAndUpdate(
+            {
+              _id: userId,
+              role: 'Student',
+              coins: { $gte: price },
+              ...(recurringAsset ? {} : { purchasedItems: { $ne: itemId } }),
+            },
+            {
+              $inc: { coins: -price, ...(recurringAsset ? { [`assets.${assetName}`]: price } : {}) },
+              ...(recurringAsset ? {} : { $addToSet: { purchasedItems: itemId } }),
+            },
+            { new: true, session: mongoSession },
+          );
+          if (!updated) throw new Error('PURCHASE_CONFLICT');
+          await Transaction.create([{
+            user: userId,
+            amount: -price,
+            type: 'Expense',
+            category: 'Want',
+            description: `Purchased ${itemId}`,
+            reason: 'Virtual store purchase',
+          }], { session: mongoSession });
+          return;
+        }
+
+        if (action === 'payBill' || action === 'payAll') {
+          const user = await User.findOne({ _id: userId, role: 'Student' }).session(mongoSession);
+          if (!user) throw new Error('USER_NOT_FOUND');
+          const purchasedItems = user.purchasedItems || [];
+          const baseCosts = { electricity: 200, water: 150, tax: 300 };
+          const lastPayments = {
+            electricity: new Date(user.lastElectricityPaid || user.createdAt),
+            water: new Date(user.lastWaterPaid || user.createdAt),
+            tax: new Date(user.lastTaxPaid || user.createdAt),
+          };
+          const statuses = {
+            electricity: user.electricityStatus,
+            water: user.waterStatus,
+            tax: user.taxStatus,
+          };
+          const dueThresholds = { electricity: 23, water: 23, tax: 5 };
+          const isDue = (bill: keyof typeof baseCosts) =>
+            statuses[bill] !== (bill === 'tax' ? 'Paid' : 'Active') ||
+            Math.floor((Date.now() - lastPayments[bill].getTime()) / 86400000) >= dueThresholds[bill];
+          const bills: Array<keyof typeof baseCosts> = action === 'payBill'
+            ? (['electricity', 'water', 'tax'].includes(String(type)) ? [type as keyof typeof baseCosts] : [])
+            : (['electricity', 'water', 'tax'] as const).filter(isDue);
+          if (!bills.length) {
+            if (action === 'payBill' && !['electricity', 'water', 'tax'].includes(String(type))) throw new Error('INVALID_BILL');
+            throw new Error('BILL_NOT_DUE');
+          }
+          if (bills.some((bill) => !isDue(bill))) throw new Error('BILL_NOT_DUE');
+          const discount = (bill: keyof typeof baseCosts) => {
+            if (bill === 'electricity') {
+              if (purchasedItems.includes('Tesla Powerwall')) return 0.2;
+              if (purchasedItems.includes('Solar Battery')) return 0.5;
+              if (purchasedItems.includes('wind_turbine')) return 0.6;
+              if (purchasedItems.includes('solar_panels') || purchasedItems.includes('Solar Array')) return 0.7;
+            }
+            if (bill === 'water') {
+              if (purchasedItems.includes('Off-Grid Purifier')) return 0.2;
+              if (purchasedItems.includes('Water Reservoir')) return 0.5;
+            }
+            if (bill === 'tax' && purchasedItems.includes('Tax Consultant')) return 0.8;
+            return 1;
+          };
+          const billCosts = bills.map((bill) => Math.floor(baseCosts[bill] * discount(bill)));
+          const total = billCosts.reduce((sum, cost) => sum + cost, 0);
+          const paidAt = new Date();
+          const setFields: Record<string, unknown> = {};
+          bills.forEach((bill) => {
+            setFields[bill === 'electricity' ? 'electricityStatus' : bill === 'water' ? 'waterStatus' : 'taxStatus'] = bill === 'tax' ? 'Paid' : 'Active';
+            setFields[bill === 'electricity' ? 'lastElectricityPaid' : bill === 'water' ? 'lastWaterPaid' : 'lastTaxPaid'] = paidAt;
+            if (bill === 'tax') setFields.isTaxRaidPending = false;
+          });
+          const updated = await User.updateOne({ _id: userId, role: 'Student', coins: { $gte: total } }, {
+            $inc: { coins: -total },
+            $set: setFields,
+          }, { session: mongoSession });
+          if (!updated.modifiedCount) throw new Error('INSUFFICIENT_COINS');
+          await Transaction.create(bills.map((bill, index) => ({
+            user: userId,
+            amount: -billCosts[index],
+            type: 'Expense',
+            category: 'Need',
+            description: `Paid ${bill} bill`,
+            reason: 'Virtual home bill payment',
+          })), { session: mongoSession });
+          return;
+        }
+      });
+    } finally {
+      await mongoSession.endSession();
     }
-
-    if (action === 'payBill' || action === 'payAll') {
-      const user = await User.findById(userId);
-      if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-      const purchasedItems = user.purchasedItems || [];
-      const costs = { electricity: 200, water: 150, tax: 300 };
-      
-      const getDiscount = (billType: string) => {
-        if (billType === 'electricity') {
-          if (purchasedItems.includes('Tesla Powerwall')) return 0.2;
-          if (purchasedItems.includes('Solar Battery')) return 0.5;
-          if (purchasedItems.includes('wind_turbine')) return 0.6;
-          if (purchasedItems.includes('solar_panels') || purchasedItems.includes('Solar Array')) return 0.7; // 30% reduction
-          return 1;
-        }
-        if (billType === 'water') {
-          if (purchasedItems.includes('Off-Grid Purifier')) return 0.2;
-          if (purchasedItems.includes('Water Reservoir')) return 0.5;
-          return 1;
-        }
-        if (billType === 'tax') {
-          if (purchasedItems.includes('Tax Consultant')) return 0.8;
-          return 1;
-        }
-        return 1;
-      };
-
-      const processPayment = (billType: string) => {
-        const cost = Math.floor((costs as any)[billType] * getDiscount(billType));
-        user.coins -= cost;
-        if (billType === 'electricity') {
-          user.electricityStatus = 'Active';
-          user.lastElectricityPaid = new Date();
-        } else if (billType === 'water') {
-          user.waterStatus = 'Active';
-          user.lastWaterPaid = new Date();
-        } else if (billType === 'tax') {
-          user.taxStatus = 'Paid';
-          user.lastTaxPaid = new Date();
-          user.isTaxRaidPending = false;
-        }
-      };
-
-      if (action === 'payBill') {
-        processPayment(type);
-      } else {
-        const now = new Date();
-        const lastElec = new Date(user.lastElectricityPaid || user.get('needs.lastElectricityPaid') || user.createdAt);
-        const lastWater = new Date(user.lastWaterPaid || user.get('needs.lastWaterPaid') || user.createdAt);
-        const lastTax = new Date(user.lastTaxPaid || user.get('needs.lastTaxPaid') || user.createdAt);
-        
-        const dE = Math.floor((now.getTime() - lastElec.getTime()) / 86400000);
-        const dW = Math.floor((now.getTime() - lastWater.getTime()) / 86400000);
-        const dT = Math.floor((now.getTime() - lastTax.getTime()) / 86400000);
-
-        if ((user.electricityStatus || user.get('needs.electricityStatus')) !== 'Active' || dE >= 23) processPayment('electricity');
-        if ((user.waterStatus || user.get('needs.waterStatus')) !== 'Active' || dW >= 23) processPayment('water');
-        if ((user.taxStatus || user.get('needs.taxStatus')) !== 'Paid' || dT >= 5) processPayment('tax');
-      }
-
-      await user.save();
-      return NextResponse.json({ success: true, stats: await getUpdatedStats(userId) });
-    }
-
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ success: true, stats: await getUpdatedStats(userId) });
+  } catch (error) {
+    if ((error as { code?: number })?.code === 11000) return NextResponse.json({ error: 'This request has already been processed.' }, { status: 409 });
+    if (error instanceof Error && error.message === 'INVALID_ITEM') return NextResponse.json({ error: 'Invalid item.' }, { status: 400 });
+    if (error instanceof Error && error.message === 'INVALID_BILL') return NextResponse.json({ error: 'Invalid bill type.' }, { status: 400 });
+    if (error instanceof Error && error.message === 'BILL_NOT_DUE') return NextResponse.json({ error: 'This bill is not due yet.' }, { status: 409 });
+    if (error instanceof Error && error.message === 'PURCHASE_CONFLICT') return NextResponse.json({ error: 'Insufficient coins or item already owned.' }, { status: 409 });
+    if (error instanceof Error && error.message === 'INSUFFICIENT_COINS') return NextResponse.json({ error: 'Insufficient coins.' }, { status: 400 });
+    if (error instanceof Error && error.message === 'INSUFFICIENT_ASSETS') return NextResponse.json({ error: 'Insufficient assets.' }, { status: 400 });
+    if (error instanceof Error && error.message === 'USER_NOT_FOUND') return NextResponse.json({ error: 'User not found.' }, { status: 404 });
+    console.error('Virtual economy request failed:', error);
+    return NextResponse.json({ error: 'Request failed; no partial balance changes were committed.' }, { status: 500 });
   }
 }

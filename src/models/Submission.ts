@@ -39,6 +39,11 @@ const SubmissionSchema = new Schema({
     enum: ['Pending', 'Approved', 'Rejected'],
     default: 'Pending',
   },
+  rewardStatus: {
+    type: String,
+    enum: ['NotRequired', 'PendingApproval', 'Awarded', 'Rejected'],
+    default: 'NotRequired',
+  },
   feedback: {
     type: String,
   },
@@ -50,6 +55,8 @@ const SubmissionSchema = new Schema({
     ref: 'User',
   },
 }, { timestamps: true });
+
+SubmissionSchema.index({ student: 1, task: 1 }, { unique: true });
 
 if (mongoose.models.Submission) {
   delete mongoose.models.Submission;

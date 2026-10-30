@@ -13,6 +13,8 @@ const ClassSchema = new mongoose.Schema({
   description: { type: String },
   inviteCode: { type: String, required: true, unique: true },
   teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  school: { type: mongoose.Schema.Types.ObjectId, ref: 'School', index: true },
+  yearGroup: { type: String, trim: true, maxlength: 40 },
   students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   color: { type: String, default: '#4F46E5' }, // Default Indigo
   icon: { type: String, default: 'Users' },
@@ -20,6 +22,12 @@ const ClassSchema = new mongoose.Schema({
   posts: [PostSchema],
   settings: {
     allowStudentPosts: { type: Boolean, default: true },
+    allowClassChat: { type: Boolean, default: true },
+    allowUsernameSearch: { type: Boolean, default: true },
+    allowCoinGifts: { type: Boolean, default: true },
+    allowLeaderboard: { type: Boolean, default: true },
+    allowTradingTerminal: { type: Boolean, default: true },
+    allowCribbyAI: { type: Boolean, default: true },
     isArchived: { type: Boolean, default: false }
   },
   createdAt: { type: Date, default: Date.now }

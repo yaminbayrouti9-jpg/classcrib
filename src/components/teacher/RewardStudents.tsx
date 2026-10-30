@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { 
@@ -34,10 +34,23 @@ export default function RewardStudents({ initialClasses }: RewardStudentsProps) 
   const [xp, setXp] = useState(100);
   const [selectedBadge, setSelectedBadge] = useState<any>(null);
   const [reason, setReason] = useState("");
+  const [taskType, setTaskType] = useState("Homework");
+  const [rewardRules, setRewardRules] = useState<any>(null);
+  const [suggestion, setSuggestion] = useState<any>(null);
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/school")
+      .then(async (response) => {
+        const data = await response.json();
+        if (response.ok) setRewardRules(data.school?.settings?.rewardsByTaskType);
+      })
+      .catch((requestError) => console.error("Unable to load school reward rules:", requestError));
+  }, []);
 
   const handleSelectClass = async (cls: any) => {
     setSelectedClass(cls);
@@ -62,9 +75,51 @@ export default function RewardStudents({ initialClasses }: RewardStudentsProps) 
     );
   };
 
+  const ruleKey = taskType.toLowerCase();
+  const currentRule = rewardRules?.[ruleKey] || {
+    coinsPerAward: 500,
+    xpPerAward: 1000,
+    coinsPerStudentPerDay: 1000,
+    xpPerStudentPerDay: 2000,
+  };
+  const COIN_CAP = currentRule.coinsPerAward;
+  const XP_CAP = currentRule.xpPerAward;
+  const isAboveCap = coins > COIN_CAP || xp > XP_CAP;
+
+  const requestSuggestion = async () => {
+    if (reason.trim().length < 5) {
+      setError("Describe the task before asking AI to suggest an award.");
+      return;
+    }
+    setLoadingSuggestion(true);
+    setError("");
+    try {
+      const response = await fetch("/api/teacher/assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "rewards", classId: selectedClass?._id, taskType, prompt: reason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to get an AI reward suggestion.");
+      setSuggestion(data.suggestion);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Unable to get an AI reward suggestion.");
+    } finally {
+      setLoadingSuggestion(false);
+    }
+  };
+
   const handleReward = async () => {
     if (selectedStudents.length === 0) {
       setError("Please select at least one student");
+      return;
+    }
+    if (!reason.trim()) {
+      setError("A reason is required for every reward");
+      return;
+    }
+    if (isAboveCap && reason.trim().length < 20) {
+      setError("Awards above the standard cap require a detailed reason (at least 20 characters)");
       return;
     }
     
@@ -77,10 +132,13 @@ export default function RewardStudents({ initialClasses }: RewardStudentsProps) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           studentIds: selectedStudents,
+          classId: selectedClass?._id,
           coins,
           xp,
+          taskType,
           badge: selectedBadge,
-          reason
+          reason,
+          idempotencyKey: crypto.randomUUID(),
         })
       });
       
@@ -226,15 +284,16 @@ export default function RewardStudents({ initialClasses }: RewardStudentsProps) 
                        <p className="text-xs font-black uppercase tracking-widest">Loading students...</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                       {classStudents.map((student) => {
                         const isSelected = selectedStudents.includes(student._id);
+                        const displayName = student.name || student.fullName || null;
                         return (
                           <button
                             key={student._id}
                             onClick={() => toggleStudent(student._id)}
                             className={clsx(
-                              "flex flex-col items-center p-6 rounded-3xl border-2 transition-all gap-4 relative group",
+                              "flex flex-col items-center p-6 rounded-3xl border-2 transition-all gap-3 relative group",
                               isSelected 
                                 ? "bg-primary/5 border-primary shadow-lg shadow-primary/10" 
                                 : "bg-card-hover/50 border-transparent hover:border-card-border"
@@ -244,14 +303,18 @@ export default function RewardStudents({ initialClasses }: RewardStudentsProps) 
                               "w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black border-2 shadow-sm transition-all",
                               isSelected ? "bg-primary text-white border-primary" : "bg-card border-card-border text-text-primary group-hover:scale-105"
                             )}>
-                              {student.username.charAt(0)}
+                              {(displayName || student.username).charAt(0).toUpperCase()}
                             </div>
-                            <span className={clsx(
-                              "text-xs font-bold truncate w-full text-center",
-                              isSelected ? "text-primary" : "text-text-secondary"
-                            )}>
-                              @{student.username}
-                            </span>
+                            <div className="text-center">
+                              {displayName && (
+                                <p className={clsx("text-xs font-black truncate w-full", isSelected ? "text-primary" : "text-text-primary")}>
+                                  {displayName}
+                                </p>
+                              )}
+                              <p className={clsx("text-[10px] font-bold", isSelected ? "text-primary/70" : "text-text-secondary")}>
+                                @{student.username}
+                              </p>
+                            </div>
                             {isSelected && (
                               <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary text-white rounded-full flex items-center justify-center shadow-lg animate-in zoom-in">
                                  <CheckCircle2 className="w-4 h-4" />
@@ -288,6 +351,15 @@ export default function RewardStudents({ initialClasses }: RewardStudentsProps) 
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <label className="md:col-span-2 text-[10px] font-black uppercase tracking-widest text-text-tertiary">
+                          Task type / school reward rules
+                          <select value={taskType} onChange={(event) => {
+                            setTaskType(event.target.value);
+                            setSuggestion(null);
+                          }} className="mt-2 block w-full rounded-xl border border-card-border bg-background p-3 text-sm font-bold normal-case text-text-primary">
+                            <option>Homework</option><option>Green</option><option>Physical</option><option>Activity</option>
+                          </select>
+                        </label>
                         <div className="space-y-4">
                            <label className="text-[10px] font-black uppercase tracking-widest text-text-tertiary ml-1">Coins Bonus</label>
                            <div className="relative group">
@@ -356,18 +428,37 @@ export default function RewardStudents({ initialClasses }: RewardStudentsProps) 
                       </div>
 
                       <div className="space-y-4">
-                         <label className="text-[10px] font-black uppercase tracking-widest text-text-tertiary ml-1">Reason / Commendation</label>
+                         <label className="text-[10px] font-black uppercase tracking-widest text-text-tertiary ml-1">Reason / Commendation <span className="text-rose-500">*</span></label>
                          <textarea 
-                           placeholder="Tell them why they're awesome..."
+                            required
+                           placeholder="Describe the task and why these students earned this reward..."
                            value={reason}
                            onChange={(e) => setReason(e.target.value)}
                            className="w-full bg-card-hover border-2 border-transparent rounded-2xl py-5 px-6 min-h-[120px] text-text-primary font-medium focus:border-primary focus:bg-card transition-all outline-none resize-none"
-                         />
-                      </div>
-                   </div>
-                </div>
+                          />
+                          <button type="button" disabled={loadingSuggestion} onClick={requestSuggestion} className="flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-xs font-black text-primary disabled:opacity-50">
+                            {loadingSuggestion ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Suggest amount with AI
+                          </button>
+                          {suggestion && (
+                            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-text-secondary">
+                              <p>AI suggestion: <strong>{suggestion.suggestedCoins} coins</strong> and <strong>{suggestion.suggestedXp} XP</strong>. This is only a suggestion; you decide.</p>
+                              {suggestion.rationale && <p className="mt-1 text-xs">{suggestion.rationale}</p>}
+                              <button type="button" onClick={() => {
+                                setCoins(suggestion.suggestedCoins);
+                                setXp(suggestion.suggestedXp);
+                              }} className="mt-2 text-xs font-black text-primary">Use suggestion</button>
+                            </div>
+                          )}
+                          {isAboveCap && (
+                            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[10px] font-black text-amber-600 uppercase tracking-wider mt-2">
+                              Above school cap (Coins: {COIN_CAP}, XP: {XP_CAP}). Admin approval required.
+                            </div>
+                          )}
+                       </div>
+                    </div>
+                 </div>
 
-                {/* Summary & Submit Column */}
+                 {/* Summary & Submit Column */}
                 <div className="space-y-8">
                    <div className="bg-card border border-card-border rounded-[2.5rem] p-8 shadow-xl space-y-8 sticky top-10">
                       <h3 className="text-xl font-black text-text-primary tracking-tight">Reward Summary</h3>

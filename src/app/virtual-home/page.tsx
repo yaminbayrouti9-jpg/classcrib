@@ -22,11 +22,13 @@ import {
 
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import VirtualHome3D from "@/components/VirtualHome3D";
 import CribbyTip from "@/components/ai/CribbyTip";
 import HomeUpgradePopover from "@/components/HomeUpgradePopover";
 import ProductOverlay from "@/components/ProductOverlay";
+import { fetchStatsOnce, invalidateStatsCache } from "@/lib/client-stats";
 
 const VIRTUAL_HOME_PRODUCTS: Record<string, {
   description: string;
@@ -201,22 +203,31 @@ const VIRTUAL_HOME_PRODUCTS: Record<string, {
 
 export default function VirtualHomePage() {
   const { data: session } = useSession();
+  const router = useRouter();
+  const role = (session?.user as any)?.role;
+  const isTeacher = role === "Teacher";
   const [userStats, setUserStats] = useState<any>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [showUpgradePopover, setShowUpgradePopover] = useState<{ level: number } | null>(null);
   const [pendingPurchaseProduct, setPendingPurchaseProduct] = useState<any | null>(null);
 
   const fetchStats = async () => {
-    const res = await fetch("/api/user/stats");
-
-    const data = await res.json();
-    if (data.success) setUserStats(data.stats);
+    try {
+      const data = await fetchStatsOnce((session?.user as { id?: string } | undefined)?.id || session?.user?.email || "");
+      if (data.success) setUserStats(data.stats);
+    } catch (error) {
+      console.error("Unable to load virtual-home account statistics:", error);
+    }
   };
 
 
   useEffect(() => {
+    if (isTeacher) {
+      router.replace("/dashboard");
+      return;
+    }
     if (session) fetchStats();
-  }, [session]);
+  }, [session, isTeacher, router]);
 
   const handleUpgrade = async () => {
     setLoading('upgrade');
@@ -224,10 +235,11 @@ export default function VirtualHomePage() {
       const res = await fetch("/api/user/home", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType: 'upgrade' }),
+        body: JSON.stringify({ actionType: 'upgrade', idempotencyKey: crypto.randomUUID() }),
       });
       const data = await res.json();
       if (data.success) {
+        invalidateStatsCache();
         setShowUpgradePopover({ level: (userStats?.homeLevel || 1) + 1 });
         fetchStats();
       } else if (data.error) {
@@ -246,10 +258,11 @@ export default function VirtualHomePage() {
       const res = await fetch("/api/user/home", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType: 'purchase', itemTitle: title, cost }),
+        body: JSON.stringify({ actionType: 'purchase', itemTitle: title, cost, idempotencyKey: crypto.randomUUID() }),
       });
       const data = await res.json();
       if (data.success) {
+        invalidateStatsCache();
         fetchStats();
         setPendingPurchaseProduct(null);
       } else if (data.error) {
@@ -289,10 +302,11 @@ export default function VirtualHomePage() {
       const res = await fetch("/api/user/stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: 'payBill', type }),
+        body: JSON.stringify({ action: 'payBill', type, idempotencyKey: crypto.randomUUID() }),
       });
       const data = await res.json();
       if (data.success) {
+        invalidateStatsCache();
         if (data.stats) {
           setUserStats(data.stats);
         } else {
@@ -308,6 +322,8 @@ export default function VirtualHomePage() {
       setLoading(null);
     }
   };
+
+  if (isTeacher) return null;
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 p-8 animate-fade-in pb-32">

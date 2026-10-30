@@ -1,21 +1,44 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CheckCircle2, BookOpen, Search, Leaf, Dumbbell, Sparkles, ClipboardList, Clock, ArrowRight } from "lucide-react";
+import { CheckCircle2, BookOpen, Search, Leaf, Dumbbell, ClipboardList, Clock, ArrowRight } from "lucide-react";
 import { clsx } from "clsx";
 import SubmitWorkModal from "./SubmitWorkModal";
 
-export default function TaskList({ initialTasks, initialSubmissions = [] }: { initialTasks: any[], initialSubmissions?: any[] }) {
+type TaskItem = {
+  _id: string | { toString(): string };
+  title: string;
+  description?: string | null;
+  dueDate: string | Date;
+  type: string;
+  difficulty?: string;
+  coins: number;
+  xp: number;
+};
+
+type SubmissionItem = {
+  task: string | { _id?: string | { toString(): string }; toString(): string };
+  status: string;
+  rewardStatus?: string;
+};
+
+export default function TaskList({ initialTasks, initialSubmissions = [] }: { initialTasks: TaskItem[], initialSubmissions?: SubmissionItem[] }) {
   const [mainTab, setMainTab] = useState("Todo");
   const [categoryFilter, setCategoryFilter] = useState("All");
-  const [selectedTask, setSelectedTask] = useState<any | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
-    setMounted(true);
+    const timer = window.setTimeout(() => setNow(Date.now()), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  const getSubmission = (taskId: string) => initialSubmissions.find(s => s.task.toString() === taskId || s.task?._id?.toString() === taskId);
+  const getSubmission = (taskId: string) => initialSubmissions.find((submission) => {
+    const submissionTaskId = typeof submission.task === "string"
+      ? submission.task
+      : submission.task._id?.toString() || submission.task.toString();
+    return submissionTaskId === taskId;
+  });
   
   const isSubmitted = (taskId: string) => {
     const s = getSubmission(taskId);
@@ -28,8 +51,8 @@ export default function TaskList({ initialTasks, initialSubmissions = [] }: { in
     return statusMatch && categoryMatch;
   });
 
-  const formatDate = (dateString: string) => {
-    if (!mounted) return "";
+  const formatDate = (dateString: string | Date) => {
+    if (now === null) return "";
     return new Date(dateString).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
@@ -63,7 +86,7 @@ export default function TaskList({ initialTasks, initialSubmissions = [] }: { in
                 categoryFilter === tab ? "bg-primary/10 border-primary/30 text-primary shadow-sm" : "bg-card border-card-border text-text-secondary hover:border-text-tertiary hover:bg-card-hover"
               )}
             >
-              {tab}
+              {tab === "Green" ? "Eco Challenge" : tab === "Physical" ? "PE / Physical Activity" : tab}
             </button>
           ))}
         </div>
@@ -80,7 +103,10 @@ export default function TaskList({ initialTasks, initialSubmissions = [] }: { in
 
       {/* Task Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredTasks.map((task) => (
+        {filteredTasks.map((task) => {
+          const submission = getSubmission(task._id.toString());
+          const isOverdue = now !== null && mainTab === "Todo" && new Date(task.dueDate).getTime() < now;
+          return (
           <div key={task._id.toString()} className={clsx(
             "bento-card flex flex-col justify-between group h-full transition-all duration-500",
             mainTab === "Done" && "opacity-75"
@@ -97,8 +123,11 @@ export default function TaskList({ initialTasks, initialSubmissions = [] }: { in
                   {task.type === "Physical" && <Dumbbell className="w-6 h-6" />}
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-card-hover rounded-xl border border-card-border text-[10px] font-black text-text-secondary uppercase tracking-widest">
-                    <Clock className="w-3.5 h-3.5 text-text-tertiary" />
+                  <div className={clsx(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest",
+                    isOverdue ? "bg-rose-500/10 border-rose-500/20 text-rose-600" : "bg-card-hover border-card-border text-text-secondary"
+                  )}>
+                    {isOverdue ? <span>Overdue · </span> : <Clock className="w-3.5 h-3.5 text-text-tertiary" />}
                     {formatDate(task.dueDate)}
                   </div>
                   <div className={clsx(
@@ -127,8 +156,14 @@ export default function TaskList({ initialTasks, initialSubmissions = [] }: { in
                </div>
                
                {mainTab === "Done" ? (
-                  <div className="flex items-center gap-2 text-emerald-500 font-bold text-xs bg-emerald-500/10 px-3 py-2 rounded-xl border border-emerald-500/20">
-                    <CheckCircle2 className="w-4 h-4" /> Done
+                  <div className={clsx(
+                    "flex items-center gap-2 font-bold text-xs px-3 py-2 rounded-xl border",
+                    submission?.rewardStatus === "PendingApproval"
+                      ? "text-amber-600 bg-amber-500/10 border-amber-500/20"
+                      : "text-emerald-500 bg-emerald-500/10 border-emerald-500/20"
+                  )}>
+                    <CheckCircle2 className="w-4 h-4" />
+                    {submission?.rewardStatus === "PendingApproval" ? "Reward pending approval" : "Done"}
                   </div>
                ) : (
                   <button 
@@ -140,7 +175,8 @@ export default function TaskList({ initialTasks, initialSubmissions = [] }: { in
                )}
             </div>
           </div>
-        ))}
+          );
+        })}
         {filteredTasks.length === 0 && (
           <div className="col-span-full py-24 text-center bg-card-hover/50 rounded-[2.5rem] border-2 border-dashed border-card-border animate-fade-in">
              <div className="w-20 h-20 bg-card rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-card-border">
@@ -164,4 +200,3 @@ export default function TaskList({ initialTasks, initialSubmissions = [] }: { in
     </div>
   );
 }
-

@@ -4,6 +4,7 @@ import { Leaf, Droplets, Sun, Award, Sparkles, Trophy, ArrowRight, Zap, Loader2 
 import { useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import clsx from "clsx";
+import { fetchStatsOnce, invalidateStatsCache } from "@/lib/client-stats";
 
 export default function GoGreenPage() {
   const { data: session } = useSession();
@@ -11,25 +12,29 @@ export default function GoGreenPage() {
   const [loading, setLoading] = useState<string | null>(null);
 
   const fetchStats = async () => {
-    const res = await fetch("/api/user/stats");
-    const data = await res.json();
-    if (data.success) setUserStats(data.stats);
+    try {
+      const data = await fetchStatsOnce((session?.user as { id?: string } | undefined)?.id || session?.user?.email || "");
+      if (data.success) setUserStats(data.stats);
+    } catch (error) {
+      console.error("Unable to load eco account statistics:", error);
+    }
   };
 
   useEffect(() => {
     if (session) fetchStats();
   }, [session]);
 
-  const handleAction = async (type: string, amount: number = 0) => {
+  const handleAction = async (type: string, activityId?: string) => {
     setLoading(type);
     try {
       const res = await fetch("/api/user/green", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionType: type, amount }),
+        body: JSON.stringify({ actionType: type, activityId }),
       });
       const data = await res.json();
       if (data.success) {
+        invalidateStatsCache();
         fetchStats();
       } else if (data.error) {
         alert(data.error);
@@ -105,7 +110,7 @@ export default function GoGreenPage() {
               color="text-blue-500" 
               bg="bg-blue-50"
               loading={loading === 'Save Water'}
-              onAction={() => handleAction('action', 15)}
+              onAction={() => handleAction('action', 'save_water')}
            />
            <GreenActionCard 
               title="Solar Power" 
@@ -115,7 +120,7 @@ export default function GoGreenPage() {
               color="text-orange-500" 
               bg="bg-orange-50"
               loading={loading === 'Solar Power'}
-              onAction={() => handleAction('action', 25)}
+              onAction={() => handleAction('action', 'solar_power')}
            />
            <GreenActionCard 
               title="Plant Trees" 
@@ -125,7 +130,7 @@ export default function GoGreenPage() {
               color="text-green-600" 
               bg="bg-green-50"
               loading={loading === 'Plant Trees'}
-              onAction={() => handleAction('action', 50)}
+              onAction={() => handleAction('action', 'plant_trees')}
            />
         </div>
 

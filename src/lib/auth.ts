@@ -9,6 +9,11 @@ if (process.env.VERCEL_URL && (!process.env.NEXTAUTH_URL || process.env.NEXTAUTH
   process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
 }
 
+const nextAuthSecret = process.env.NEXTAUTH_SECRET;
+if (process.env.NODE_ENV === "production" && !nextAuthSecret) {
+  throw new Error("NEXTAUTH_SECRET must be configured in production.");
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -23,7 +28,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         await dbConnect();
-        const user = await User.findOne({ username: credentials.username }).select("+password");
+        const user = await User.findOne({ username: credentials.username.trim().toLowerCase() }).select("+password");
 
         if (!user) {
           throw new Error("User not found");
@@ -37,9 +42,10 @@ export const authOptions: NextAuthOptions = {
 
         return {
           id: user._id.toString(),
-          name: user.username,
+          name: user.displayName || user.username,
           username: user.username,
           role: user.role,
+          schoolId: user.school?.toString(),
         };
       }
     })
@@ -49,6 +55,7 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
+        token.schoolId = (user as any).schoolId;
       }
       return token;
     },
@@ -56,6 +63,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.id;
         (session.user as any).role = token.role;
+        (session.user as any).schoolId = token.schoolId;
       }
       return session;
     }
@@ -66,6 +74,5 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
   },
-  secret: process.env.NEXTAUTH_SECRET || "a_very_secret_key_for_classcrib_12345",
+  secret: nextAuthSecret,
 };
-

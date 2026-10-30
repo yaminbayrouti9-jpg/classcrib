@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldAlert, Coins, ArrowRight, Gavel } from "lucide-react";
+import { ShieldAlert, Coins, ArrowRight, AlertTriangle } from "lucide-react";
 
 interface TaxRaidPopoverProps {
   onClose: () => void;
@@ -26,18 +26,18 @@ export default function TaxRaidPopover({ onClose }: TaxRaidPopoverProps) {
           className="relative bg-white w-full max-w-lg rounded-[40px] shadow-[0_32px_64px_-16px_rgba(225,29,72,0.4)] overflow-hidden flex flex-col items-center text-center p-12 gap-8 border-4 border-rose-500"
         >
           <div className="w-24 h-24 bg-rose-500 rounded-3xl flex items-center justify-center shadow-xl shadow-rose-500/40 rotate-12">
-             <Gavel className="w-12 h-12 text-white" />
+             <AlertTriangle className="w-12 h-12 text-white" />
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-center gap-2 text-rose-600 font-black uppercase tracking-[0.3em] text-xs">
-               <ShieldAlert className="w-4 h-4" /> IRS Tax Raid
+               <ShieldAlert className="w-4 h-4" /> Utility Authority Notice
             </div>
-            <h2 className="text-5xl font-black text-text-primary tracking-tighter">FINES ISSUED!</h2>
+            <h2 className="text-5xl font-black text-gray-900 tracking-tighter">FINE ISSUED!</h2>
           </div>
 
-          <p className="text-text-secondary font-bold text-lg">
-            You haven't paid your property taxes for over a week. The authorities have raided your crib and issued a fine.
+          <p className="text-gray-600 font-bold text-lg">
+            Your utility bills have been overdue. A late-payment fine has been applied to your account.
           </p>
 
           <div className="bg-rose-50 p-6 rounded-3xl w-full border border-rose-100 flex items-center justify-between">
@@ -56,7 +56,7 @@ export default function TaxRaidPopover({ onClose }: TaxRaidPopoverProps) {
             onClick={onClose}
             className="w-full h-16 bg-rose-600 text-white rounded-2xl font-black text-xl shadow-xl shadow-rose-600/20 flex items-center justify-center group hover:bg-rose-700 transition-all"
           >
-            Acknowledge & Pay Fine <ArrowRight className="w-6 h-6 ml-4 group-hover:translate-x-2 transition-transform" />
+            Acknowledge <ArrowRight className="w-6 h-6 ml-4 group-hover:translate-x-2 transition-transform" />
           </button>
         </motion.div>
       </div>

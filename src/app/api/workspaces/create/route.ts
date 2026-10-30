@@ -29,13 +29,16 @@ export async function POST(req: Request) {
     const Class = (await import("@/models/Class")).default;
     const { nanoid } = await import("nanoid");
 
-    const aiBanner = `https://image.pollinations.ai/prompt/abstract%20education%20pattern%20for%20${encodeURIComponent(name)}?width=800&height=400&nologo=true&seed=${Math.floor(Math.random() * 1000)}`;
+    if (typeof name !== "string" || name.trim().length < 1 || name.trim().length > 120) {
+      return NextResponse.json({ error: "Workspace name must be between 1 and 120 characters." }, { status: 400 });
+    }
+    const teacher = await User.findById((session.user as any).id).select("school");
 
     const workspace = await Class.create({
-      name,
+      name: name.trim(),
       teacher: (session.user as any).id,
+      school: teacher?.school,
       inviteCode: nanoid(6).toUpperCase(),
-      banner: aiBanner,
       students: [],
       posts: []
     });

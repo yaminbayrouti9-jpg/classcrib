@@ -3,38 +3,49 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { GraduationCap, BookOpen, ArrowRight, Loader2, Sparkles, UserPlus, CheckCircle, ShieldCheck } from "lucide-react";
-import { clsx } from "clsx";
+import { BookOpen, ArrowRight, Loader2, Sparkles, UserPlus, CheckCircle, ShieldCheck } from "lucide-react";
 import "@/app/auth.css";
 
 export default function SignupPage() {
-  const [role, setRole] = useState<"Student" | "Teacher">("Student");
+  const [accountType, setAccountType] = useState<"student" | "school">("student");
   const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [dob, setDob] = useState("");
+  const [schoolName, setSchoolName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const router = useRouter();
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setMessage("");
 
     try {
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch(accountType === "school" ? "/api/school/signup" : "/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password, role, dob: role === 'Student' ? dob : undefined }),
+        body: JSON.stringify(accountType === "school"
+          ? { schoolName, contactEmail, username, displayName, password }
+          : { username, displayName, password, role: "Student", dob }),
       });
 
       if (res.ok) {
-        router.push("/login");
+        if (accountType === "school") {
+          setError("");
+          setMessage("School request submitted for ClassCrib operations review. The school administrator account will be created only if the request is approved. Outcome emails are sent when email delivery is configured.");
+        } else {
+          router.push("/login");
+        }
       } else {
         const data = await res.json();
-        setError(data.message || "Registration failed. Try a different username.");
+        setError(data.message || data.error || "Registration failed. Try a different username.");
       }
-    } catch (err) {
+    } catch {
       setError("Unable to process enrollment. Please check your connection.");
     } finally {
       setLoading(false);
@@ -96,46 +107,85 @@ export default function SignupPage() {
           <div className="max-w-md mx-auto space-y-10">
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-primary font-black uppercase text-[10px] tracking-[0.3em]">
-                 <UserPlus className="w-3 h-3" /> Registration Open
+                 <UserPlus className="w-3 h-3" /> Create an account
               </div>
-              <h3 className="text-3xl font-black text-academy-navy tracking-tighter">Create Account</h3>
+              <h3 className="text-3xl font-black text-academy-navy tracking-tighter">
+                {accountType === "student" ? "Student enrollment" : "School registration"}
+              </h3>
             </div>
 
             <form onSubmit={handleSignup} className="space-y-8">
-              {/* Role Selection */}
-              <div className="space-y-3">
-                <label className="block text-xs font-black text-academy-navy uppercase tracking-widest ml-1">Select Identity</label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div 
-                    onClick={() => setRole("Student")}
-                    className={clsx("role-card", role === "Student" && "active")}
-                  >
-                    <div className={clsx(
-                      "w-12 h-12 rounded-2xl flex items-center justify-center mb-3 transition-colors",
-                      role === "Student" ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-gray-100 text-text-tertiary"
-                    )}>
-                      <BookOpen className="w-6 h-6" />
-                    </div>
-                    <span className="font-black text-sm text-academy-navy">Student</span>
-                    <span className="text-[10px] font-bold text-text-tertiary mt-1">Earn & Learn</span>
-                  </div>
-                  <div 
-                    onClick={() => setRole("Teacher")}
-                    className={clsx("role-card", role === "Teacher" && "active")}
-                  >
-                    <div className={clsx(
-                      "w-12 h-12 rounded-2xl flex items-center justify-center mb-3 transition-colors",
-                      role === "Teacher" ? "bg-secondary text-white shadow-lg shadow-secondary/20" : "bg-gray-100 text-text-tertiary"
-                    )}>
-                      <GraduationCap className="w-6 h-6" />
-                    </div>
-                    <span className="font-black text-sm text-academy-navy">Teacher</span>
-                    <span className="text-[10px] font-bold text-text-tertiary mt-1">Manage & Verify</span>
-                  </div>
-                </div>
+              <div className="grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1.5">
+                <button
+                  type="button"
+                  onClick={() => { setAccountType("student"); setError(""); setMessage(""); }}
+                  className={`rounded-xl px-3 py-3 text-sm font-black transition-colors ${accountType === "student" ? "bg-white text-academy-navy shadow-sm" : "text-text-secondary"}`}
+                >
+                  Student
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAccountType("school"); setError(""); setMessage(""); }}
+                  className={`rounded-xl px-3 py-3 text-sm font-black transition-colors ${accountType === "school" ? "bg-white text-academy-navy shadow-sm" : "text-text-secondary"}`}
+                >
+                  School
+                </button>
               </div>
 
+              {accountType === "school" ? (
+                <div className="space-y-2 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm font-medium text-text-secondary">
+                  Submit your school details for review by the ClassCrib operations team. A school administrator account is created only after approval.
+                </div>
+              ) : (
+                <p className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm font-medium text-text-secondary">
+                  Student accounts are created here. Ask your school administrator for teacher or school access.
+                </p>
+              )}
+
               <div className="space-y-4">
+                {accountType === "school" && (
+                  <>
+                    <div>
+                      <label className="mb-2 ml-1 block text-xs font-black uppercase tracking-widest text-academy-navy">School name</label>
+                      <input
+                        type="text"
+                        value={schoolName}
+                        onChange={(event) => setSchoolName(event.target.value)}
+                        className="academic-input"
+                        placeholder="Your school"
+                        maxLength={150}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-2 ml-1 block text-xs font-black uppercase tracking-widest text-academy-navy">School contact email</label>
+                      <input
+                        type="email"
+                        value={contactEmail}
+                        onChange={(event) => setContactEmail(event.target.value)}
+                        className="academic-input"
+                        placeholder="you@school.example"
+                        maxLength={254}
+                        autoComplete="email"
+                        required
+                      />
+                    </div>
+                  </>
+                )}
+                <div>
+                  <label className="block text-xs font-black text-academy-navy uppercase tracking-widest mb-2 ml-1">
+                    {accountType === "student" ? "Name shown to your teachers" : "School administrator name"}
+                  </label>
+                  <input
+                    type="text"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="academic-input"
+                    placeholder={accountType === "student" ? "Your name" : "Your full name"}
+                    maxLength={100}
+                    required
+                  />
+                </div>
                 <div>
                   <label className="block text-xs font-black text-academy-navy uppercase tracking-widest mb-2 ml-1">Username</label>
                   <div className="relative group">
@@ -145,7 +195,9 @@ export default function SignupPage() {
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       className="academic-input input-with-icon"
-                      placeholder="Choose a cool username"
+                      placeholder={accountType === "student" ? "Choose a cool username" : "Choose an administrator username"}
+                      minLength={3}
+                      maxLength={32}
                       required
                     />
                   </div>
@@ -159,28 +211,29 @@ export default function SignupPage() {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="academic-input input-with-icon"
-                      placeholder="Create a strong key"
+                      placeholder={accountType === "school" ? "At least 12 characters" : "Create a strong key"}
+                      minLength={accountType === "school" ? 12 : 10}
+                      maxLength={128}
+                      autoComplete="new-password"
                       required
                     />
                   </div>
                 </div>
 
-                {role === "Student" && (
-                  <div className="animate-in slide-in-from-top-2">
-                    <label className="block text-xs font-black text-academy-navy uppercase tracking-widest mb-2 ml-1">Date of Birth</label>
-                    <div className="relative group">
-                      <Sparkles className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary group-focus-within:text-academy-navy transition-colors" />
-                      <input
-                        type="date"
-                        value={dob}
-                        onChange={(e) => setDob(e.target.value)}
-                        className="academic-input input-with-icon"
-                        required={role === "Student"}
-                      />
-                    </div>
-                    <p className="text-[10px] font-bold text-text-tertiary mt-2 ml-1">Needed to personalize your experience</p>
+                {accountType === "student" && <div className="animate-in slide-in-from-top-2">
+                  <label className="block text-xs font-black text-academy-navy uppercase tracking-widest mb-2 ml-1">Date of Birth</label>
+                  <div className="relative group">
+                    <Sparkles className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-text-tertiary group-focus-within:text-academy-navy transition-colors" />
+                    <input
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      className="academic-input input-with-icon"
+                      required
+                    />
                   </div>
-                )}
+                  <p className="text-[10px] font-bold text-text-tertiary mt-2 ml-1">Needed to personalize your experience</p>
+                </div>}
               </div>
 
               {error && (
@@ -188,13 +241,18 @@ export default function SignupPage() {
                    {error}
                 </div>
               )}
+              {message && (
+                <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+                  {message}
+                </div>
+              )}
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || Boolean(message)}
                 className="w-full h-16 bg-academy-navy text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-academy-navy/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-3"
               >
-                {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <>Enroll Now <ArrowRight className="w-5 h-5" /></>}
+                {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <>{accountType === "student" ? "Enroll Now" : "Submit school request"} <ArrowRight className="w-5 h-5" /></>}
               </button>
             </form>
 

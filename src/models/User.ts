@@ -6,6 +6,11 @@ const UserSchema = new Schema({
     required: [true, 'Username is required'],
     unique: true,
   },
+  displayName: {
+    type: String,
+    trim: true,
+    maxlength: 100,
+  },
   password: {
     type: String,
     required: [true, 'Password is required'],
@@ -13,7 +18,7 @@ const UserSchema = new Schema({
   },
   role: {
     type: String,
-    enum: ['Teacher', 'Student'],
+    enum: ['Teacher', 'Student', 'SchoolAdmin', 'Parent'],
     default: 'Student',
   },
   dob: {
@@ -22,10 +27,35 @@ const UserSchema = new Schema({
   parentEmail: {
     type: String,
   },
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true,
+    maxlength: 254,
+  },
+  school: {
+    type: Schema.Types.ObjectId,
+    ref: 'School',
+    index: true,
+  },
+  schoolYear: {
+    type: String,
+    trim: true,
+    maxlength: 40,
+  },
+  team: {
+    type: String,
+    trim: true,
+    maxlength: 80,
+  },
   // Student specific stats
   coins: {
     type: Number,
     default: 1000,
+  },
+  behaviorPointLockVersion: {
+    type: Number,
+    default: 0,
   },
   xp: {
     type: Number,
@@ -74,6 +104,13 @@ const UserSchema = new Schema({
   isTaxRaidPending: { type: Boolean, default: false },
   lastFinedAt: { type: Date, default: null },
   lastGreenClaim: { type: Date, default: null },
+  greenClaims: [{
+    actionId: { type: String, required: true },
+    dateKey: { type: String, required: true },
+    claimedAt: { type: Date, default: Date.now },
+  }],
+  giftsSentToday: { type: Number, default: 0 },
+  giftsDateKey: { type: String, default: '' },
   sustainabilityPoints: { type: Number, default: 0 },
   hasCompletedTutorial: { type: Boolean, default: false },
   weeklyEarnings: { type: Number, default: 0 },

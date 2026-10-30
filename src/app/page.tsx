@@ -1,14 +1,14 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
-import { 
+import { useState, useSyncExternalStore } from "react";
+import {
+  type LucideIcon,
   ArrowRight, 
   Sparkles, 
   Shield, 
   Rocket, 
   BookOpen, 
-  Leaf, 
   Coins, 
   Zap, 
   Globe, 
@@ -26,21 +26,37 @@ import {
   Trophy,
   Droplets,
   Trees,
-  ShoppingBag,
   GraduationCap,
-  TrendingUp,
   Award,
   AlertTriangle,
-  Lightbulb,
   MessageSquare
 } from "lucide-react";
+
+type LandingTab = "crib" | "bills" | "streaks" | "neighborhood" | "cribby";
+
+function subscribeToTheme(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+  return () => observer.disconnect();
+}
+
+function getThemeSnapshot() {
+  return document.documentElement.getAttribute("data-theme") || "light";
+}
+
+function getServerThemeSnapshot() {
+  return "light";
+}
 
 // Interactive Simulator Types & Data
 interface UpgradeItem {
   id: string;
   title: string;
   cost: number;
-  icon: any;
+  icon: LucideIcon;
   color: string;
   desc: string;
   benefit: string;
@@ -55,8 +71,11 @@ const UPGRADES: UpgradeItem[] = [
 ];
 
 export default function LandingPage() {
-  const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState("light");
+  const theme = useSyncExternalStore(
+    subscribeToTheme,
+    getThemeSnapshot,
+    getServerThemeSnapshot,
+  );
 
   // Interactive Simulator State
   const [coins, setCoins] = useState(4000);
@@ -65,21 +84,12 @@ export default function LandingPage() {
   const [showNotification, setShowNotification] = useState<string | null>(null);
 
   // Bento Feature Grid active tab
-  const [activeTab, setActiveTab] = useState<"crib" | "bills" | "streaks" | "neighborhood" | "cribby">("crib");
+  const [activeTab, setActiveTab] = useState<LandingTab>("crib");
 
   // FAQ state
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // Theme Sync on Mount
-  useEffect(() => {
-    setMounted(true);
-    const localTheme = localStorage.getItem("classcrib-theme") || "light";
-    setTheme(localTheme);
-    document.documentElement.setAttribute("data-theme", localTheme);
-  }, []);
-
   const changeTheme = (themeId: string) => {
-    setTheme(themeId);
     localStorage.setItem("classcrib-theme", themeId);
     document.documentElement.setAttribute("data-theme", themeId);
   };
@@ -135,10 +145,6 @@ export default function LandingPage() {
     setTimeout(() => setShowNotification(null), 4000);
   };
 
-  if (!mounted) {
-    return <div className="min-h-screen bg-slate-50 dark:bg-slate-900" />;
-  }
-
   const faqData = [
     {
       q: "What is ClassCrib?",
@@ -150,15 +156,15 @@ export default function LandingPage() {
     },
     {
       q: "What happens if a student forgets to pay their bills?",
-      a: "Just like in real life, financial choices have consequences! If a student ignores their bills, they face a utility cutoff (e.g. the 3D room's lights turn off) or even a virtual 'Tax Raid' where they lose a portion of their assets. This provides a safe, low-stakes environment to understand the importance of credit, billing cycles, and prompt financial accountability."
+      a: "Just like in real life, financial choices have consequences! If a student ignores their bills, they face a utility cutoff (e.g. the 3D room's lights turn off) or even a utility suspension or a virtual penalty notice from the school authority where they lose a portion of their balance. This provides a safe, low-stakes environment to understand the importance of budgeting, billing cycles, and prompt financial responsibility."
     },
     {
       q: "Is it suitable for high schools and middle schools?",
       a: "Absolutely! ClassCrib is built with high-fidelity, premium visuals that engage high-school students, while the behavioral gamification keeps middle-schoolers actively excited. Teachers can create virtual classrooms, assign tasks, and monitor streak completions through an elegant teacher dashboard."
     },
     {
-      q: "Is ClassCrib COPPA compliant and secure?",
-      a: "Yes, security and privacy are engineered into the platform. We support parent emails for automated progress reporting, private profiles that hide metrics from global leaderboards, and use secure enterprise-grade systems so student data is always fully protected."
+      q: "Is ClassCrib PDPL compliant and secure?",
+      a: "Yes, Security and privacy are engineered into the platform. We comply with the UAE Personal Data Protection Law (PDPL). We support parent emails for automated progress reporting, private profiles that hide metrics from global leaderboards, and use secure enterprise-grade systems so student data is always fully protected."
     }
   ];
 
@@ -297,7 +303,7 @@ return (
                 <div className="w-3.5 h-3.5 rounded-full bg-emerald-500" />
               </div>
               <div className="px-4 py-1.5 bg-card-hover border border-card-border rounded-xl text-[10px] font-black text-text-secondary uppercase tracking-widest">
-                Student Portal Mockup
+                Interactive Demo Mockup (Simulation Only)
               </div>
             </div>
 
@@ -399,7 +405,7 @@ return (
                       </div>
                       <span className="text-xs font-bold text-text-secondary">Property Tax</span>
                     </div>
-                    <span className="text-xs font-black text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20">Overdue</span>
+                    <span className="text-xs font-black text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">Active</span>
                   </div>
                 </div>
 
@@ -448,7 +454,7 @@ return (
         <h2 className="text-4xl md:text-5xl font-black text-text-primary tracking-tight">
           Test the ClassCrib <span className="text-primary text-gradient">Utility Simulator</span>
         </h2>
-        <p className="text-base md:text-lg text-text-secondary font-medium">
+        <p className="text-base md:text-lg text-text-secondary font-medium"><em className="text-[10px] font-black uppercase tracking-widest not-italic text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full mr-2">Educational Simulation Only</em>
           Buy sustainable upgrades below using your starting sandbox coins. Watch your weekly expenses shrink and your net weekly balance soar! Complete the visual crib.
          </p>
       </div>
@@ -737,7 +743,7 @@ return (
               An Elevated Suite of <span className="text-primary text-gradient">Interactive Features</span>
             </h2>
             <p className="text-base md:text-lg text-text-secondary font-medium leading-relaxed">
-              Explore how ClassCrib's mechanics engage students deeply and bridge the gap between academic tasks and microeconomics.
+              Explore how ClassCrib&apos;s mechanics engage students deeply and bridge the gap between academic tasks and microeconomics.
             </p>
           </div>
 
@@ -754,7 +760,7 @@ return (
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
+                  onClick={() => setActiveTab(tab.id as LandingTab)}
                   className={`px-6 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-2 border transition-all ${
                     activeTab === tab.id 
                       ? "bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-[1.02]" 
@@ -813,7 +819,7 @@ return (
                   </div>
                   <div className="h-px bg-card-border/60" />
                   <p className="text-xs font-bold text-text-secondary text-left italic">
-                    "My student completes his algebra work first thing Monday morning just to buy the Gaming Rig desk upgrade for his crib."
+                    &quot;My student completes his algebra work first thing Monday morning just to buy the Gaming Rig desk upgrade for his crib.&quot;
                   </p>
                   <p className="text-[9px] font-black text-text-tertiary uppercase tracking-widest text-left">— Sarah M., Parent</p>
                 </div>
@@ -827,9 +833,9 @@ return (
                   <div className="w-12 h-12 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center shadow-sm">
                     <Zap className="w-6 h-6" />
                   </div>
-                  <h3 className="text-3xl font-black text-text-primary tracking-tight">Simulated Utility Bills & Tax Raids</h3>
+                  <h3 className="text-3xl font-black text-text-primary tracking-tight">Utility Management & Bill Simulation</h3>
                   <p className="text-base text-text-secondary font-medium leading-relaxed">
-                    Earning virtual money is only half the battle. In ClassCrib, students must pay weekly bills for electricity, water, and property taxes using their classroom coins. If unpaid, students experience cutoffs, or virtual Tax Raids where automated audits penalize their cash balances.
+                    Earning virtual money is only half the battle. In ClassCrib, students must pay weekly bills for electricity, water, and property taxes using their classroom coins. If unpaid, students experience utility cutoffs or a virtual penalty notice where their coin balance is reduced.
                   </p>
                   <ul className="space-y-3 font-bold text-sm text-text-secondary">
                     <li className="flex items-center gap-3">
@@ -849,7 +855,7 @@ return (
                 <div className="lg:col-span-5 bg-card-hover border border-card-border p-6 rounded-[2rem] text-left space-y-4">
                   <div className="flex items-center gap-3 text-rose-500 font-extrabold text-sm bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl">
                     <AlertTriangle className="w-5 h-5" />
-                    <span>Warning: Tax Raid imminent in 2 days!</span>
+                    <span>Warning: Utility cutoff imminent in 2 days!</span>
                   </div>
                   <div className="p-4 bg-card rounded-2xl border border-card-border space-y-2">
                     <div className="flex justify-between text-xs font-bold text-text-secondary">
@@ -857,8 +863,8 @@ return (
                       <span className="text-rose-500 font-black">Overdue</span>
                     </div>
                     <div className="flex justify-between text-xs font-bold text-text-secondary">
-                      <span>Unpaid Taxes</span>
-                      <span className="text-rose-500 font-black">Overdue</span>
+                      <span>Property Tax</span>
+                      <span className="text-emerald-500 font-black">Active</span>
                     </div>
                   </div>
                 </div>
@@ -874,7 +880,7 @@ return (
                   </div>
                   <h3 className="text-3xl font-black text-text-primary tracking-tight">Assignment Tracking & Study Streaks</h3>
                   <p className="text-base text-text-secondary font-medium leading-relaxed">
-                    ClassCrib makes task completion highly addictive. When students check off their school assignments, their study calendar logs a 'green' active study day. Maintain a consistent streak to earn active XP multipliers, compound bonuses, and double coin payouts!
+                    ClassCrib makes task completion highly addictive. When students check off their school assignments, their study calendar logs a &apos;green&apos; active study day. Maintain a consistent streak to earn active XP multipliers, compound bonuses, and double coin payouts!
                   </p>
                   <ul className="space-y-3 font-bold text-sm text-text-secondary">
                     <li className="flex items-center gap-3">
@@ -987,7 +993,7 @@ return (
                     </div>
                   </div>
                   <div className="bg-card p-4 rounded-2xl border border-card-border text-xs text-text-secondary leading-relaxed font-bold">
-                    "Hey Alex! I see your Electricity Bill is 200 coins. If you buy the Solar Panel upgrade for 1,200 coins, it will drop to 140 coins. That's a 30% saving that pays for itself in just 20 weeks!"
+                    &quot;Hey Alex! I see your Electricity Bill is 200 coins. If you buy the Solar Panel upgrade for 1,200 coins, it will drop to 140 coins. That&apos;s a 30% saving that pays for itself in just 20 weeks!&quot;
                   </div>
                 </div>
               </div>
@@ -1009,7 +1015,7 @@ return (
           <h2 className="text-4xl md:text-5xl font-black text-text-primary tracking-tight">
             Loved by Students. <span className="text-primary text-gradient">Trusted by Educators.</span>
           </h2>
-          <p className="text-base md:text-lg text-text-secondary font-medium">
+          <p className="text-base md:text-lg text-text-secondary font-medium"><em className="text-[10px] font-black uppercase tracking-widest not-italic text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full mr-2">Educational Simulation Only</em>
             ClassCrib aligns play-based incentives with absolute institutional accountability, establishing consistent study habits.
              </p>
         </div>
@@ -1138,7 +1144,7 @@ return (
             Still Got Questions? <span className="text-primary text-gradient">We Got Answers.</span>
           </h2>
           <p className="text-base text-text-secondary font-medium">
-            Learn more about the platform's economics, educational design, and child safety compliance.
+            Learn more about the platform&apos;s economics, educational design, and child safety compliance.
             </p>
         </div>
 
@@ -1221,8 +1227,8 @@ return (
           <div className="space-y-4">
             <p className="text-[10px] font-black text-text-tertiary uppercase tracking-widest">Contact & Compliance</p>
             <ul className="space-y-2.5 text-sm font-bold text-text-secondary">
-              <li><a href="#" className="hover:text-primary transition-colors">Privacy & COPPA</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors">Terms of Service</a></li>
+              <li><a href="/privacy" className="hover:text-primary transition-colors">Privacy & COPPA</a></li>
+              <li><a href="/terms" className="hover:text-primary transition-colors">Terms of Service</a></li>
               <li><a href="mailto:support@classcrib.com" className="hover:text-primary transition-colors">support@classcrib.com</a></li>
             </ul>
           </div>
@@ -1232,8 +1238,8 @@ return (
         <div className="max-w-7xl mx-auto border-t border-card-border/60 pt-8 flex flex-col sm:flex-row items-center justify-between gap-6">
           <p className="text-xs font-bold text-text-tertiary uppercase tracking-widest">© 2026 CLASSCRIB CORPORATION. ALL RIGHTS RESERVED.</p>
           <div className="flex gap-6 font-bold text-xs text-text-tertiary">
-            <a href="#" className="hover:text-text-primary transition-colors">Terms</a>
-            <a href="#" className="hover:text-text-primary transition-colors">Privacy</a>
+            <a href="/terms" className="hover:text-text-primary transition-colors">Terms</a>
+            <a href="/privacy" className="hover:text-text-primary transition-colors">Privacy</a>
             <a href="#" className="hover:text-text-primary transition-colors">Security</a>
           </div>
            </div>

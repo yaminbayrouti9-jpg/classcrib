@@ -11,6 +11,9 @@ export async function POST(req: Request) {
     if (!session || !userSession?.username) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    if (userSession.role !== "Student") {
+      return NextResponse.json({ error: "Virtual home is only available to students" }, { status: 403 });
+    }
 
     const { layout } = await req.json();
     await dbConnect();
@@ -33,6 +36,9 @@ export async function GET() {
     const userSession = session?.user as any;
     if (!session || !userSession?.username) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (userSession.role !== "Student") {
+      return NextResponse.json({ error: "Virtual home is only available to students" }, { status: 403 });
     }
 
     await dbConnect();

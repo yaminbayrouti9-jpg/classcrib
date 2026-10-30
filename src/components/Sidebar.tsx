@@ -23,23 +23,24 @@ import {
 import { signOut, useSession } from "next-auth/react";
 import { clsx } from "clsx";
 import { useState, useEffect } from "react";
+import { fetchStatsOnce } from "@/lib/client-stats";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const [pendingCount, setPendingCount] = useState(0);
+  const statsCacheKey = (session?.user as { id?: string } | undefined)?.id || session?.user?.email || "";
 
   useEffect(() => {
     if (session?.user) {
       const fetchStats = async () => {
         try {
-          const res = await fetch("/api/user/stats");
-          const data = await res.json();
+          const data = await fetchStatsOnce(statsCacheKey);
           if (data.success) {
-            setPendingCount(data.stats.pendingVerifications || 0);
+            setPendingCount(Number(data.stats.pendingVerifications) || 0);
           }
-        } catch (err) {
-          console.error("Failed to fetch sidebar stats", err);
+        } catch (error) {
+          console.error("Failed to fetch sidebar stats", error);
         }
       };
       fetchStats();
@@ -47,7 +48,7 @@ export default function Sidebar() {
       const interval = setInterval(fetchStats, 120000);
       return () => clearInterval(interval);
     }
-  }, [session]);
+  }, [session, statsCacheKey]);
   
   if (status === "loading") {
     return (
@@ -81,10 +82,23 @@ export default function Sidebar() {
     { icon: ClipboardCheck, label: "Verifications", href: "/verify", badge: pendingCount },
     { icon: Trophy, label: "Leaderboards", href: "/rankings" },
     { icon: Sparkles, label: "Reward Students", href: "/rewards" },
-    { icon: "/cribby-idea.png", label: "AI Assistance", href: "/chat", isImage: true },
+    { icon: Trophy, label: "Behaviour Points", href: "/behavior" },
+    { icon: Users, label: "Parent Invites", href: "/parent/invite" },
+    { icon: "/cribby-idea.png", label: "AI Assistance", href: "/teacher/assistant", isImage: true },
   ];
 
-  const menuItems = role === "Teacher" ? teacherItems : studentItems;
+  const schoolAdminItems = [
+    { icon: LayoutDashboard, label: "School Admin", href: "/school-admin" },
+    { icon: Users, label: "Classes & Users", href: "/classes" },
+    { icon: Trophy, label: "Behaviour Points", href: "/behavior" },
+  ];
+  const parentItems = [
+    { icon: LayoutDashboard, label: "Parent Overview", href: "/parent" },
+  ];
+  const menuItems = role === "Teacher" ? teacherItems
+    : role === "SchoolAdmin" ? schoolAdminItems
+      : role === "Parent" ? parentItems
+        : studentItems;
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col z-50">
@@ -170,4 +184,3 @@ export default function Sidebar() {
     </aside>
   );
 }
-

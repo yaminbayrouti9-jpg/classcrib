@@ -21,6 +21,8 @@ const MessageSchema = new Schema({
   },
 }, { timestamps: true });
 
+MessageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 });
+
 const Message = models.Message || model('Message', MessageSchema);
 
 export default Message;

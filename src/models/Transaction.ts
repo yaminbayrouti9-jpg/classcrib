@@ -22,7 +22,13 @@ const TransactionSchema = new Schema({
   category: {
     type: String,
     enum: ['Task', 'Need', 'Want', 'Gold', 'Business', 'Property', 'Reward'],
-  }
+  },
+  xpAmount: { type: Number, default: 0 },
+  awardedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  awardedAt: { type: Date },
+  recipient: { type: Schema.Types.ObjectId, ref: 'User' },
+  reason: { type: String },
+  source: { type: String, index: true },
 }, { timestamps: true });
 
 if (mongoose.models.Transaction) {

@@ -4,6 +4,7 @@ import Chat from '@/models/Chat';
 import Message from '@/models/Message';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import mongoose from 'mongoose';
 
 export async function GET(req: Request) {
   try {
@@ -17,7 +18,11 @@ export async function GET(req: Request) {
     const chatId = searchParams.get('chatId');
 
     if (chatId) {
-      // Fetch messages for a specific chat
+      if (!mongoose.isValidObjectId(chatId)) {
+        return NextResponse.json({ error: 'Invalid chat ID' }, { status: 400 });
+      }
+      const chat = await Chat.findOne({ _id: chatId, userId }).select('_id');
+      if (!chat) return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
       const messages = await Message.find({ chatId }).sort({ createdAt: 1 }).lean();
       return NextResponse.json(messages);
     } else {
@@ -35,13 +40,15 @@ export async function DELETE(req: Request) {
     const session = await getServerSession(authOptions);
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const userId = (session.user as any).id;
     const { searchParams } = new URL(req.url);
     const chatId = searchParams.get('chatId');
 
-    if (!chatId) return NextResponse.json({ error: 'Chat ID required' }, { status: 400 });
+    if (!chatId || !mongoose.isValidObjectId(chatId)) return NextResponse.json({ error: 'Valid chat ID required' }, { status: 400 });
 
     await dbConnect();
-    await Chat.findByIdAndDelete(chatId);
+    const deleted = await Chat.findOneAndDelete({ _id: chatId, userId });
+    if (!deleted) return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
     await Message.deleteMany({ chatId });
 
     return NextResponse.json({ success: true });

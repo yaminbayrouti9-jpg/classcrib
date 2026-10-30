@@ -16,6 +16,8 @@ const ChatSchema = new Schema({
   },
 }, { timestamps: true });
 
+ChatSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 30 });
+
 const Chat = models.Chat || model('Chat', ChatSchema);
 
 export default Chat;

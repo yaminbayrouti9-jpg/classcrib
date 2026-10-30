@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { 
   TrendingUp, 
@@ -38,6 +38,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { useSession } from "next-auth/react";
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -49,11 +50,47 @@ import {
   Tooltip, 
   ResponsiveContainer 
 } from 'recharts';
+import { fetchStatsOnce, invalidateStatsCache } from "@/lib/client-stats";
+
+type MarketData = {
+  success: boolean;
+  mode: "live" | "simulation" | "stale";
+  prices: {
+    gold: number;
+    silver: number;
+    cnc500: number;
+    business: number;
+    property: number;
+    trends: Record<string, number>;
+  };
+  tips: string[];
+  timestamp: number;
+};
+
+const FALLBACK_MARKET_DATA: MarketData = {
+  success: true,
+  mode: "simulation",
+  prices: {
+    gold: 2350,
+    silver: 28,
+    cnc500: 7800,
+    business: 5200,
+    property: 15500,
+    trends: { gold: 0.4, silver: -0.2, cnc500: 0.1, business: 1.2, property: 0.5 },
+  },
+  tips: ["Prices are illustrative for this educational simulation."],
+  timestamp: 0,
+};
 
 export default function MarketplacePage() {
   const { data: session } = useSession();
+  const router = useRouter();
+  const role = (session?.user as any)?.role;
+  const isTeacher = role === "Teacher";
   const [userStats, setUserStats] = useState<any>(null);
-  const [marketData, setMarketData] = useState<any>(null);
+  const [marketData, setMarketData] = useState<MarketData>(FALLBACK_MARKET_DATA);
+  const [marketError, setMarketError] = useState<string | null>(null);
+  const [marketLoading, setMarketLoading] = useState(true);
   const [loading, setLoading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'portfolio' | 'store' | 'stocks'>('portfolio');
   const [selectedAsset, setSelectedAsset] = useState<'gold' | 'silver' | 'cnc500' | 'business' | 'property'>('gold');
@@ -74,25 +111,49 @@ export default function MarketplacePage() {
   const [donationStatus, setDonationStatus] = useState<string | null>(null);
 
   const fetchStats = async () => {
-    const res = await fetch("/api/user/stats");
-    const data = await res.json();
-    if (data.success) setUserStats(data.stats);
+    try {
+      const data = await fetchStatsOnce((session?.user as { id?: string } | undefined)?.id || session?.user?.email || "");
+      if (data.success) setUserStats(data.stats);
+    } catch (error) {
+      console.error("Unable to load marketplace account statistics:", error);
+    }
   };
 
   const fetchMarket = async () => {
-    const res = await fetch("/api/market/prices");
-    const data = await res.json();
-    if (data.success) setMarketData(data);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6_000);
+    try {
+      const res = await fetch("/api/market/prices", { signal: controller.signal });
+      const data = await res.json() as MarketData & { error?: string };
+      if (!res.ok || !data.success ||
+          !data.prices || !["gold", "silver", "cnc500", "business", "property"].every((key) =>
+            Number.isFinite(data.prices[key as keyof MarketData["prices"]])) ||
+          !data.prices.trends || !Array.isArray(data.tips)) {
+        throw new Error(data.error || "Market prices are unavailable.");
+      }
+      setMarketData(data);
+      setMarketError(null);
+    } catch (error) {
+      console.error("Market data request failed:", error);
+      setMarketError("Using illustrative simulation prices because market data is temporarily unavailable.");
+    } finally {
+      clearTimeout(timeout);
+      setMarketLoading(false);
+    }
   };
 
   useEffect(() => {
+    if (isTeacher) {
+      router.replace("/dashboard");
+      return;
+    }
     if (session) {
       fetchStats();
       fetchMarket();
       const interval = setInterval(fetchMarket, 30000); // Refresh every 30s
       return () => clearInterval(interval);
     }
-  }, [session]);
+  }, [session, isTeacher, router]);
 
   const handlePay = async (actionType: string, billId?: string) => {
     setLoading(billId || actionType);
@@ -105,10 +166,11 @@ export default function MarketplacePage() {
       const res = await fetch("/api/user/stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, type }),
+        body: JSON.stringify({ action, type, idempotencyKey: crypto.randomUUID() }),
       });
       const data = await res.json();
       if (data.success) {
+        invalidateStatsCache();
         if (data.stats) setUserStats(data.stats);
         else fetchStats();
       }
@@ -132,11 +194,13 @@ export default function MarketplacePage() {
           action, 
           assetId: selectedAsset, 
           quantity: tradeAmount,
-          pricePerUnit 
+          pricePerUnit,
+          idempotencyKey: crypto.randomUUID(),
         }),
       });
       const data = await res.json();
       if (data.success) {
+        invalidateStatsCache();
         fetchStats();
       } else {
         alert(data.error || "Trade failed");
@@ -156,10 +220,15 @@ export default function MarketplacePage() {
       const res = await fetch("/api/user/donate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recipientUsername: donateUsername, amount: donateAmount }),
+        body: JSON.stringify({
+          recipientUsername: donateUsername,
+          amount: donateAmount,
+          idempotencyKey: crypto.randomUUID(),
+        }),
       });
       const data = await res.json();
       if (data.success) {
+        invalidateStatsCache();
         setDonationStatus("Success! " + data.message);
         fetchStats();
         setTimeout(() => {
@@ -186,10 +255,13 @@ export default function MarketplacePage() {
       const res = await fetch("/api/user/stats", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: 'purchase', itemId }),
+        body: JSON.stringify({ action: 'purchase', itemId, idempotencyKey: crypto.randomUUID() }),
       });
       const data = await res.json();
-      if (data.success) fetchStats();
+      if (data.success) {
+        invalidateStatsCache();
+        fetchStats();
+      }
       else alert(data.error || "Purchase failed");
     } finally {
       setLoading(null);
@@ -243,12 +315,19 @@ export default function MarketplacePage() {
   useEffect(() => {
     if (isJunior && activeTab === 'stocks') setActiveTab('portfolio');
   }, [isJunior, activeTab]);
+  useEffect(() => {
+    if (userStats?.featureAccess?.tradingTerminal === false && activeTab === 'stocks') {
+      setActiveTab('portfolio');
+    }
+  }, [userStats?.featureAccess?.tradingTerminal, activeTab]);
 
-  if (!userStats || !marketData) {
+  if (!userStats) {
+     if (isTeacher) return null;
+
      return (
         <div className="h-[60vh] flex flex-col items-center justify-center gap-4">
            <Loader2 className="w-10 h-10 animate-spin text-primary" />
-           <p className="text-text-tertiary font-bold animate-pulse uppercase tracking-widest text-[10px]">Syncing with Global Markets...</p>
+           <p className="text-text-tertiary font-bold animate-pulse uppercase tracking-widest text-[10px]">Loading account data...</p>
         </div>
      );
   }
@@ -265,7 +344,7 @@ export default function MarketplacePage() {
   // Generate chart data
   const chartData = Array.from({ length: 20 }, (_, i) => ({
     name: i,
-    value: marketData.prices[selectedAsset] * (1 + (Math.sin(i / 2) * 0.02) + (Math.random() * 0.01 - 0.005))
+    value: marketData.prices[selectedAsset] * (1 + Math.sin(i / 2) * 0.02)
   }));
 
   const assetLabels: any = {
@@ -290,7 +369,15 @@ export default function MarketplacePage() {
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6">
         <div className="space-y-4">
           <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded-full w-fit text-[10px] font-black uppercase tracking-widest border border-emerald-500/20">
-            <Activity className="w-3 h-3 animate-pulse" /> Live Economy Active
+            <Activity className="w-3 h-3 animate-pulse" /> {
+              marketLoading
+                ? "Loading quotes · Simulation"
+                : marketData.mode === "live"
+                ? "Live Market Prices"
+                : marketData.mode === "stale"
+                  ? "Using Cached Prices"
+                  : "Simulation Prices"
+            }
           </div>
           <h2 className="text-5xl md:text-6xl font-black text-text-primary tracking-tighter">
             Market <span className="text-primary">Hub.</span>
@@ -299,34 +386,41 @@ export default function MarketplacePage() {
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex bg-card border border-card-border p-1.5 rounded-2xl shadow-xl w-fit">
               <TabButton active={activeTab === 'portfolio'} onClick={() => setActiveTab('portfolio')} icon={Wallet} label="Portfolio" />
-              {!isJunior && <TabButton active={activeTab === 'stocks'} onClick={() => setActiveTab('stocks')} icon={BarChart3} label="Terminal" />}
+              {!isJunior && userStats.featureAccess?.tradingTerminal !== false && <TabButton active={activeTab === 'stocks'} onClick={() => setActiveTab('stocks')} icon={BarChart3} label="Terminal" />}
               <TabButton active={activeTab === 'store'} onClick={() => setActiveTab('store')} icon={ShoppingCart} label={isJunior ? "Prize Hub" : "The Store"} />
             </div>
 
-            <button 
+            {userStats.featureAccess?.coinGifts !== false && <button
               onClick={() => setIsDonating(true)}
               className="flex items-center gap-2 px-6 py-4 bg-purple-500 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all shadow-lg shadow-purple-500/20"
             >
               <Send className="w-4 h-4" /> Send Gift
-            </button>
+            </button>}
 
-            <button 
+            {userStats.featureAccess?.cribbyAI !== false && <button
               onClick={handleExplainMe}
               className="flex items-center gap-2 px-6 py-4 bg-primary/10 text-primary rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-primary hover:text-white transition-all border border-primary/20"
             >
               <Sparkles className="w-4 h-4" /> Explain Platform
-            </button>
+            </button>}
           </div>
         </div>
 
         <div className="flex flex-col items-end gap-2">
            <p className="text-[10px] font-black text-text-tertiary uppercase tracking-widest">Total Net Worth</p>
-           <h3 className="text-4xl font-black text-text-primary tracking-tighter">${netWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h3>
+           <h3 className="text-4xl font-black text-text-primary tracking-tighter flex items-center gap-2"><Coins className="w-7 h-7 text-amber-500" />{Math.round(netWorth).toLocaleString()} coins</h3>
            <div className="flex items-center gap-2 text-emerald-500 font-bold text-xs">
               <ArrowUpRight className="w-3 h-3" /> Wealth Tracking Active
            </div>
         </div>
       </div>
+
+      {marketError && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs font-semibold text-text-secondary">
+          <span>{marketError}</span>
+          <button onClick={fetchMarket} className="rounded-lg bg-primary px-3 py-2 font-bold text-white">Retry</button>
+        </div>
+      )}
 
       <AnimatePresence mode="wait">
         {activeTab === 'portfolio' && (
@@ -351,7 +445,7 @@ export default function MarketplacePage() {
                </div>
                <div className="relative z-10">
                   <p className="text-xs font-bold text-white/60 uppercase tracking-widest mb-1">Liquid Cash Balance</p>
-                  <h3 className="text-7xl font-black tracking-tighter">${coins.toLocaleString()}</h3>
+                  <h3 className="text-7xl font-black tracking-tighter">{coins.toLocaleString()} Coins</h3>
                   <p className="text-sm font-bold text-white/40 mt-4 flex items-center gap-2">
                     <TrendingUp className="w-4 h-4" /> Available for immediate investment
                   </p>
@@ -405,7 +499,7 @@ export default function MarketplacePage() {
                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div className="space-y-1">
                     <h3 className="text-3xl font-black text-text-primary tracking-tighter uppercase">{assetLabels[selectedAsset]}</h3>
-                    <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">Real-time performance tracker</p>
+                    <p className="text-[10px] font-bold text-text-tertiary uppercase tracking-widest">Educational simulation only - not financial advice</p>
                   </div>
                   <div className="flex gap-2 items-center w-full md:w-auto">
                     <button 
@@ -458,7 +552,7 @@ export default function MarketplacePage() {
                      <Info className="w-6 h-6" />
                   </div>
                   <div>
-                    <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">AI-Powered Market Tip</p>
+                    <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-1">Market Tip · Educational simulation, not financial advice</p>
                     <p className="text-sm font-bold text-text-secondary leading-relaxed">
                       {marketData.tips[Math.floor(Date.now() / 86400000) % marketData.tips.length]}
                     </p>
@@ -483,7 +577,7 @@ export default function MarketplacePage() {
                        {selectedAsset === 'business' ? 'Price per 1% Equity' : 'Current Price per Unit'}
                      </p>
                       <h5 className="text-4xl font-black text-text-primary tracking-tighter">
-                        ${(marketData.prices[selectedAsset] / (selectedAsset === 'business' ? 100 : 1)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {(marketData.prices[selectedAsset] / (selectedAsset === 'business' ? 100 : 1)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Coins
                      </h5>
                      {selectedAsset === 'business' && (
                        <p className="text-[8px] font-bold text-primary uppercase mt-1">Per 1.00% Equity</p>
@@ -494,7 +588,7 @@ export default function MarketplacePage() {
                <div className="space-y-4">
                   <div className="flex justify-between text-[10px] font-black text-text-tertiary uppercase tracking-widest">
                      <span>{assetUnits[selectedAsset]} to trade</span>
-                     <span>Total: ${(tradeAmount * (marketData.prices[selectedAsset] / (selectedAsset === 'business' ? 100 : 1))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                     <span>Total: {(tradeAmount * (marketData.prices[selectedAsset] / (selectedAsset === 'business' ? 100 : 1))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Coins</span>
                   </div>
                   <div className="flex items-center gap-4 bg-background p-2 rounded-2xl border border-card-border">
                      <button onClick={() => setTradeAmount(Math.max(1, tradeAmount - 1))} className="w-10 h-10 rounded-xl bg-card-hover flex items-center justify-center font-black text-xl hover:bg-primary hover:text-white transition-all">-</button>
@@ -643,7 +737,7 @@ export default function MarketplacePage() {
               <div className="p-8 bg-purple-600 text-white flex justify-between items-center">
                  <div>
                     <h3 className="text-2xl font-black tracking-tighter">Gift Coins</h3>
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Help a friend & gain XP</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Send virtual coins to a classmate</p>
                  </div>
                  <button onClick={() => setIsDonating(false)} className="hover:bg-white/10 p-2 rounded-xl transition-colors">
                    <X className="w-6 h-6" />
@@ -709,7 +803,10 @@ export default function MarketplacePage() {
       </AnimatePresence>
 
       {/* Floating Cribby Assistant */}
-      <div className="fixed bottom-8 right-8 z-[100] flex flex-col items-end gap-4">
+      <div className={clsx(
+        "fixed bottom-8 right-8 z-[100] flex flex-col items-end gap-4",
+        userStats.featureAccess?.cribbyAI === false && "hidden"
+      )}>
         <AnimatePresence>
           {isAssistantOpen && (
             <motion.div 
@@ -868,11 +965,11 @@ function AssetCard({ title, value, unit, price, icon: Icon, color }: any) {
       <div className="pt-4 border-t border-card-border space-y-2">
          <div className="flex justify-between items-center text-[10px] font-bold text-text-secondary">
             <span>Unit Price</span>
-            <span className="text-text-primary">${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-text-primary">{price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Coins</span>
          </div>
          <div className="flex justify-between items-center">
             <p className="text-[10px] font-bold text-text-secondary">Current Total</p>
-            <p className="text-sm font-black text-text-primary">${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="text-sm font-black text-text-primary">{totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Coins</p>
          </div>
       </div>
     </div>

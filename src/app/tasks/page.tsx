@@ -1,3 +1,7 @@
+// Force every request to be server-rendered so session is always available.
+// This fixes the "server error 621218007" on direct URL load or refresh.
+export const dynamic = "force-dynamic";
+
 import TaskList from "@/components/student/TaskList";
 import CribbyTip from "@/components/ai/CribbyTip";
 
@@ -7,8 +11,8 @@ import dbConnect from "@/lib/mongodb";
 import Task from "@/models/Task";
 import Submission from "@/models/Submission";
 import User from "@/models/User";
-import Workspace from "@/models/Workspace"; // Required for populate to work correctly
-import { ClipboardList, Plus, Search, Filter, Zap } from "lucide-react";
+import Class from "@/models/Class";
+import { Zap } from "lucide-react";
 import TeacherTaskClient from "@/components/teacher/TeacherTaskClient";
 import { serialize } from "@/lib/serialize";
 import { redirect } from "next/navigation";
@@ -19,8 +23,9 @@ export default async function TasksPage() {
     redirect("/login");
   }
 
-  const role = (session?.user as any)?.role || "Student";
-  const userId = (session.user as any).id;
+  const sessionUser = session.user as { id?: string; role?: string };
+  const role = sessionUser.role || "Student";
+  const userId = sessionUser.id;
 
   if (!userId) {
     return (
@@ -32,16 +37,12 @@ export default async function TasksPage() {
 
   await dbConnect();
 
-  // Ensure Workspace model is registered
-  if (!Workspace) {
-    console.error("Workspace model not found");
-  }
-
-  const userRecord = await User.findById(userId).lean();
+  const userRecord = await User.findById(userId).select("workspaces classes").lean();
 
   if (role === "Teacher") {
     const createdTasks = await Task.find({ creator: userId })
-      .populate('class', 'name')
+      .populate({ path: 'class', model: Class, select: 'name students' })
+      .populate({ path: 'classes', model: Class, select: 'name students' })
       .sort({ createdAt: -1 })
       .lean();
 
@@ -53,19 +54,34 @@ export default async function TasksPage() {
   }
 
   // Student View
-  const tasks = await Task.find({})
-    .populate('class', 'name')
-    .sort({ dueDate: 1 })
-    .lean();
+  const userClasses = userRecord?.workspaces?.length ? userRecord.workspaces : userRecord?.classes || [];
+  const filteredTasks = userClasses.length
+    ? await Task.find({
+      $and: [
+        { $or: [
+          { class: { $in: userClasses } },
+          { workspace: { $in: userClasses } },
+          { classes: { $in: userClasses } },
+        ] },
+        { $or: [
+          { assignedStudents: { $exists: false } },
+          { assignedStudents: { $size: 0 } },
+          { assignedStudents: userId },
+        ] },
+      ],
+    })
+      .populate({ path: 'class', model: Class, select: 'name' })
+      .populate({ path: 'classes', model: Class, select: 'name' })
+      .sort({ dueDate: 1 })
+      .lean()
+    : [];
 
-  // Filter tasks by classes the student is in
-  const userClasses = (userRecord as any)?.workspaces || (userRecord as any)?.classes || []; 
-  const filteredTasks = tasks.filter((t: any) => {
-    const classId = t.class?._id || t.class || t.workspace;
-    return userClasses.some((uc: any) => uc.toString() === classId?.toString());
-  });
-
-const submissions = await Submission.find({ student: userId }).lean();
+const submissions = filteredTasks.length
+  ? await Submission.find({
+    student: userId,
+    task: { $in: filteredTasks.map((task) => task._id) },
+  }).select("task status").lean()
+  : [];
 
 const nonPendingTaskIds = new Set(
   submissions
@@ -73,7 +89,7 @@ const nonPendingTaskIds = new Set(
     .map(s => s.task?.toString())
     .filter(Boolean)
 );
-const pendingTasksCount = tasks.filter(t => !nonPendingTaskIds.has(t._id?.toString())).length;
+const pendingTasksCount = filteredTasks.filter(t => !nonPendingTaskIds.has(t._id?.toString())).length;
 
 return (
   <div className="max-w-7xl mx-auto space-y-10 p-6 md:p-10 animate-fade-in pb-24">
@@ -94,4 +110,3 @@ return (
   </div>
   );
 }
-

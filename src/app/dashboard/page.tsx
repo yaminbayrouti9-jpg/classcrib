@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import dbConnect from "@/lib/mongodb";
@@ -31,6 +33,9 @@ export default async function DashboardPage() {
   }
 
   const role = userRecord.role;
+  if (role === "Parent") redirect("/parent");
+  if (role === "SchoolAdmin") redirect("/school-admin");
+  if (role !== "Teacher" && role !== "Student") redirect("/login");
 
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);

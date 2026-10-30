@@ -62,8 +62,12 @@ export default function CribbyTip() {
           <div className="flex-1">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/10 shadow-sm">
-                  Cribby's Pro Tip
+                <span className={tip?.type === "warning"
+                  ? "text-[10px] font-black uppercase tracking-[0.2em] text-rose-500 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/10 shadow-sm inline-flex items-center gap-1"
+                  : "text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/10 shadow-sm"
+                }>
+                  {tip?.type === "warning" && <ShieldAlert className="h-3 w-3" />}
+                  {tip?.type === "warning" ? "Overdue Assignment" : "Cribby's Pro Tip"}
                 </span>
                 {session?.user && (session.user as any).purchasedItems?.includes('ai_turbo') && (
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/10 shadow-sm flex items-center gap-1">
