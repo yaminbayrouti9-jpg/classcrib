@@ -35,6 +35,7 @@ export default async function DashboardPage() {
   const role = userRecord.role;
   if (role === "Parent") redirect("/parent");
   if (role === "SchoolAdmin") redirect("/school-admin");
+  if (role === "PlatformAdmin") redirect("/platform-admin/schools");
   if (role !== "Teacher" && role !== "Student") redirect("/login");
 
   const sevenDaysAgo = new Date();

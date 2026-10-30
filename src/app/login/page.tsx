@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { getSession, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Loader2, Sparkles, BookOpen, Star, ShieldCheck, CheckCircle, Wallet } from "lucide-react";
@@ -29,7 +29,16 @@ export default function LoginPage() {
       if (res?.error) {
         setError("Invalid credentials. Please try again.");
       } else {
-        router.push("/dashboard");
+        const signedInSession = await getSession();
+        const role = (signedInSession?.user as { role?: string } | undefined)?.role;
+        const destination = role === "PlatformAdmin"
+          ? "/platform-admin/schools"
+          : role === "SchoolAdmin"
+            ? "/school-admin"
+            : role === "Parent"
+              ? "/parent"
+              : "/dashboard";
+        router.push(destination);
         router.refresh();
       }
     } catch (err) {

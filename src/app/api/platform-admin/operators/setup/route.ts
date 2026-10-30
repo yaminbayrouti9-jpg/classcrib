@@ -7,6 +7,24 @@ import dbConnect from "@/lib/mongodb";
 import BootstrapClaim from "@/models/BootstrapClaim";
 import User from "@/models/User";
 
+export async function GET() {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "Sign in with a school administrator account to check operator setup." }, { status: 401 });
+  }
+  const actor = session.user as { id?: string; role?: string };
+  if (actor.role !== "SchoolAdmin" || !actor.id) {
+    return NextResponse.json({ error: "Only a school administrator can check operator setup." }, { status: 403 });
+  }
+
+  await dbConnect();
+  const [claim, operator] = await Promise.all([
+    BootstrapClaim.exists({ _id: "initial-platform-operator" }),
+    User.exists({ role: "PlatformAdmin" }),
+  ]);
+  return NextResponse.json({ available: !claim && !operator });
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -69,7 +87,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, operatorId }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "OPERATOR_SETUP_ALREADY_COMPLETED") {
-      return NextResponse.json({ error: "Initial operator setup has already been completed." }, { status: 409 });
+      return NextResponse.json({
+        code: "OPERATOR_SETUP_ALREADY_COMPLETED",
+        error: "Initial operator setup has already been completed.",
+      }, { status: 409 });
     }
     if (error instanceof Error && error.message === "SCHOOL_ADMIN_REQUIRED") {
       return NextResponse.json({ error: "Your school administrator access could not be verified." }, { status: 403 });

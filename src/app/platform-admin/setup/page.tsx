@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { Loader2, ShieldCheck } from "lucide-react";
 
@@ -10,10 +10,33 @@ export default function PlatformOperatorSetupPage() {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [statusError, setStatusError] = useState("");
   const [complete, setComplete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [setupAvailable, setSetupAvailable] = useState<boolean | null>(null);
   const { data: session, status } = useSession();
   const role = (session?.user as { role?: string } | undefined)?.role;
+
+  useEffect(() => {
+    if (status !== "authenticated" || role !== "SchoolAdmin") return;
+    let active = true;
+
+    fetch("/api/platform-admin/operators/setup")
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to check operator setup status.");
+        if (active) setSetupAvailable(data.available === true);
+      })
+      .catch((statusError: unknown) => {
+        if (active) {
+          setStatusError(statusError instanceof Error ? statusError.message : "Unable to check operator setup status.");
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [status, role]);
 
   const createOperator = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -29,8 +52,12 @@ export default function PlatformOperatorSetupPage() {
         body: JSON.stringify({ username, displayName, password }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to create the operator account.");
+      if (!response.ok) {
+        if (data.code === "OPERATOR_SETUP_ALREADY_COMPLETED") setSetupAvailable(false);
+        throw new Error(data.error || "Unable to create the operator account.");
+      }
       setComplete(true);
+      setSetupAvailable(false);
       setPassword("");
     } catch (setupError) {
       setError(setupError instanceof Error ? setupError.message : "Unable to create the operator account.");
@@ -76,6 +103,23 @@ export default function PlatformOperatorSetupPage() {
           <div role="status" className="space-y-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 text-sm text-text-primary">
             <p className="font-bold">Operator account created. The setup endpoint can no longer be used.</p>
             <p>Sign out of this school admin account, then sign in as the operator you just created to review school requests.</p>
+            <button type="button" onClick={() => void signOut({ callbackUrl: "/login" })} className="inline-flex rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white">
+              Sign out and go to login
+            </button>
+          </div>
+        ) : statusError ? (
+          <div role="alert" className="space-y-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-5 text-sm text-text-primary">
+            <p className="font-bold">{statusError}</p>
+            <p>Operator setup status could not be verified. No account can be created until the setup service is available.</p>
+          </div>
+        ) : setupAvailable === null ? (
+          <div className="flex items-center gap-3 text-sm text-text-secondary">
+            <Loader2 className="h-4 w-4 animate-spin" /> Checking whether an operator already exists…
+          </div>
+        ) : setupAvailable === false ? (
+          <div role="status" className="space-y-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 text-sm text-text-primary">
+            <p className="font-bold">The initial operator account has already been created.</p>
+            <p>Operator setup is closed. Sign out and sign in with the existing operator account to review school requests.</p>
             <button type="button" onClick={() => void signOut({ callbackUrl: "/login" })} className="inline-flex rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white">
               Sign out and go to login
             </button>

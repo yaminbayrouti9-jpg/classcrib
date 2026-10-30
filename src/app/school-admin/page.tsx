@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, Upload, Users, BookOpen, Activity, Clock } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { AlertCircle, CheckCircle2, Download, Loader2, Upload, UserPlus, Users, BookOpen, Activity, Clock } from "lucide-react";
 
 type Settings = {
   allowUsernameSearch: boolean;
@@ -160,6 +160,10 @@ export default function SchoolAdminPage() {
   const [hasMoreRewardHistory, setHasMoreRewardHistory] = useState(false);
   const [loadingRewardHistory, setLoadingRewardHistory] = useState(false);
   const [csv, setCsv] = useState("");
+  const [teacherCsv, setTeacherCsv] = useState("");
+  const [teacherUsername, setTeacherUsername] = useState("");
+  const [teacherDisplayName, setTeacherDisplayName] = useState("");
+  const [teacherPassword, setTeacherPassword] = useState("");
   const [classIds, setClassIds] = useState<string[]>([]);
   const [className, setClassName] = useState("");
   const [classTeacherId, setClassTeacherId] = useState("");
@@ -181,10 +185,9 @@ export default function SchoolAdminPage() {
       schoolResponse.json(), usersResponse.json(), reportResponse.json(), behaviorResponse.json(), rewardsResponse.json(), behaviorReportResponse.json(),
     ]);
     if (!schoolResponse.ok) throw new Error(schoolData.error || "Unable to load school settings.");
-    if (!userData.error) {
-      setTeachers(userData.teachers || []);
-      setClasses(userData.classes || []);
-    }
+    if (!usersResponse.ok) throw new Error(userData.error || "Unable to load teachers and classes.");
+    setTeachers(userData.teachers || []);
+    setClasses(userData.classes || []);
     if (!reportData.error) setReport(reportData.summary);
     if (!behaviorData.error) setPending(behaviorData.pending || []);
     if (!rewardsData.error) setPendingRewards(rewardsData.requests || []);
@@ -261,6 +264,83 @@ export default function SchoolAdminPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const createTeacher = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+    let created = false;
+    try {
+      const response = await fetch("/api/school/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teacherOnly: true,
+          users: [{ username: teacherUsername, displayName: teacherDisplayName, password: teacherPassword }],
+          classIds: [],
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to create teacher account.");
+      setTeacherUsername("");
+      setTeacherDisplayName("");
+      setTeacherPassword("");
+      setMessage(`Teacher account @${data.importedUsernames?.[0] || teacherUsername.trim().toLowerCase()} created. Share the temporary password securely with the teacher.`);
+      created = true;
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Unable to create teacher account.");
+    } finally {
+      setBusy(false);
+    }
+    if (created) {
+      try {
+        await load();
+      } catch (refreshError) {
+        setError(`Teacher account was created, but the list could not be refreshed: ${refreshError instanceof Error ? refreshError.message : "Unknown error."}`);
+      }
+    }
+  };
+
+  const importTeachers = async () => {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    let created = false;
+    try {
+      const response = await fetch("/api/school/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: teacherCsv, teacherOnly: true, classIds: [] }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to import teacher accounts.");
+      setMessage(`Created ${data.importedCount} teacher account${data.importedCount === 1 ? "" : "s"}. Share the CSV passwords securely with the teachers.`);
+      setTeacherCsv("");
+      created = true;
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : "Unable to import teacher accounts.");
+    } finally {
+      setBusy(false);
+    }
+    if (created) {
+      try {
+        await load();
+      } catch (refreshError) {
+        setError(`Teacher accounts were created, but the list could not be refreshed: ${refreshError instanceof Error ? refreshError.message : "Unknown error."}`);
+      }
+    }
+  };
+
+  const downloadTeacherCsvTemplate = () => {
+    const blob = new Blob(["username,displayName,password\r\n"], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "classcrib-teachers-template.csv";
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const createClass = async () => {
@@ -377,6 +457,126 @@ export default function SchoolAdminPage() {
 
       <section className="grid gap-6 lg:grid-cols-2">
         <div className="rounded-2xl border border-card-border bg-card p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-black text-text-primary">Create teacher account</h2>
+              <p className="mt-1 text-xs text-text-secondary">Create a staff login for your school. Teachers can be assigned to classes after creation.</p>
+            </div>
+            <UserPlus className="h-5 w-5 shrink-0 text-primary" />
+          </div>
+          <form onSubmit={createTeacher} className="mt-4 space-y-3">
+            <input
+              value={teacherDisplayName}
+              onChange={(event) => setTeacherDisplayName(event.target.value)}
+              placeholder="Teacher full name"
+              minLength={2}
+              maxLength={100}
+              required
+              className="w-full rounded-xl border border-card-border bg-background p-3 text-sm"
+            />
+            <input
+              value={teacherUsername}
+              onChange={(event) => setTeacherUsername(event.target.value)}
+              placeholder="Username (letters, numbers, . _ -)"
+              minLength={3}
+              maxLength={32}
+              pattern="[A-Za-z0-9._-]+"
+              autoComplete="username"
+              required
+              className="w-full rounded-xl border border-card-border bg-background p-3 text-sm"
+            />
+            <input
+              type="password"
+              value={teacherPassword}
+              onChange={(event) => setTeacherPassword(event.target.value)}
+              placeholder="Temporary password (10+ characters)"
+              minLength={10}
+              maxLength={128}
+              autoComplete="new-password"
+              required
+              className="w-full rounded-xl border border-card-border bg-background p-3 text-sm"
+            />
+            <button type="submit" disabled={busy} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white disabled:opacity-50">
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />} Create teacher
+            </button>
+          </form>
+          <p className="mt-3 text-xs text-text-tertiary">Passwords are stored as hashes. Give each teacher their temporary password through a secure channel.</p>
+        </div>
+
+        <div className="rounded-2xl border border-card-border bg-card p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-black text-text-primary">Import teacher accounts from CSV</h2>
+              <p className="mt-1 text-xs text-text-secondary">Upload a CSV file or paste its contents. Imports are all-or-nothing if any row is invalid or a username is taken.</p>
+            </div>
+            <button type="button" onClick={downloadTeacherCsvTemplate} className="inline-flex items-center gap-2 rounded-lg border border-card-border px-3 py-2 text-xs font-bold text-text-primary">
+              <Download className="h-4 w-4" /> CSV template
+            </button>
+          </div>
+          <label className="mt-4 block text-xs font-bold text-text-secondary">
+            Choose a .csv file
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              disabled={busy}
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                if (file.size > 250_000) {
+                  setError("CSV file is too large. Maximum size is 250 KB.");
+                  event.target.value = "";
+                  return;
+                }
+                try {
+                  setTeacherCsv(await file.text());
+                  setError("");
+                  setMessage("");
+                } catch {
+                  setError("Unable to read the selected CSV file.");
+                }
+                event.target.value = "";
+              }}
+              className="mt-2 block w-full rounded-xl border border-card-border bg-background p-3 text-sm"
+            />
+          </label>
+          <p className="mt-3 text-xs text-text-tertiary">Required columns: username, displayName, password. Quote fields containing commas. Maximum 500 teachers and 250 KB. Optional role values must be Teacher.</p>
+          <textarea
+            value={teacherCsv}
+            onChange={(event) => setTeacherCsv(event.target.value)}
+            rows={5}
+            placeholder={"username,displayName,password\nteacher01,Teacher One,TempPassword123"}
+            className="mt-3 w-full rounded-xl border border-card-border bg-background p-3 font-mono text-xs"
+          />
+          <button type="button" onClick={importTeachers} disabled={busy || !teacherCsv.trim()} className="mt-3 flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white disabled:opacity-50">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Import teachers
+          </button>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-card-border bg-card p-6">
+        <h2 className="text-xl font-black text-text-primary">Teacher accounts</h2>
+        <p className="mt-1 text-xs text-text-secondary">Teacher logins belonging to your school. Assign them to classes below.</p>
+        {teachers.length ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[400px] text-left text-sm">
+              <thead className="text-xs uppercase text-text-tertiary">
+                <tr><th className="pb-2 pr-4">Name</th><th className="pb-2">Username</th></tr>
+              </thead>
+              <tbody className="divide-y divide-card-border">
+                {teachers.map((teacher) => (
+                  <tr key={teacher._id}>
+                    <td className="py-3 pr-4 font-bold text-text-primary">{teacher.displayName || "—"}</td>
+                    <td className="py-3 text-text-secondary">@{teacher.username}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="mt-4 text-sm text-text-tertiary">No teacher accounts yet. Create one or import a CSV.</p>}
+      </section>
+
+      <section className="grid gap-6 lg:grid-cols-2">
+        <div className="rounded-2xl border border-card-border bg-card p-6">
           <h2 className="text-xl font-black text-text-primary">Activity pulse</h2>
           <p className="mt-1 text-xs text-text-tertiary">Student assignment submissions per day, last seven days.</p>
           <div className="mt-5 grid grid-cols-7 gap-2">
@@ -448,9 +648,9 @@ export default function SchoolAdminPage() {
         </div>
 
         <div className="rounded-2xl border border-card-border bg-card p-6">
-          <h2 className="text-xl font-black text-text-primary">CSV account import</h2>
+          <h2 className="text-xl font-black text-text-primary">Import student accounts to classes</h2>
           <p className="mt-2 text-xs text-text-secondary">
-            Headers: username, displayName, password; optional: role (Student, Teacher, SchoolAdmin), schoolYear, team. Passwords must be at least 10 characters.
+            Headers: username, displayName, password; optional: role (Student or Teacher), schoolYear, team. Passwords must be at least 10 characters. School administrator accounts cannot be created through imports.
           </p>
           <textarea
             value={csv}
@@ -472,7 +672,7 @@ export default function SchoolAdminPage() {
             ))}
           </div>
           <button onClick={importUsers} disabled={busy || !csv.trim()} className="mt-4 flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-xs font-black uppercase text-white disabled:opacity-50">
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Import accounts
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Import student accounts
           </button>
         </div>
       </section>
